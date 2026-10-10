@@ -1,7 +1,7 @@
 {
-  "name": "meccha-chameleon",
+  "name": "meccha-kaitoon",
   "version": "1.0.0",
-  "description": "体に絵を描いて背景に溶け込む、お絵かきかくれんぼ（LAN対戦・ブラウザ版）",
+  "description": "体に絵を描いて背景に溶け込む、お絵かきかくれんぼ「めっちゃカイトオン」",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

@@ -1,4 +1,4 @@
-// めっちゃカメレオン（LAN版） - サーバー
+// めっちゃカイトオン（LAN版） - サーバー
 // 依存パッケージなし。Node.js 標準モジュールだけで HTTP + WebSocket を提供する。
 // 1サーバー = 1部屋。ゲーム進行は public/js/room.js（ブラウザのP2P版と共通）。
 
@@ -196,7 +196,7 @@ import('./public/js/room.js').then(({ createRoom }) => {
 
 function onListen() {
   console.log('');
-  console.log('  🦎 めっちゃカメレオン（LAN版）サーバー起動！');
+  console.log('  🦎 めっちゃカイトオン（LAN版）サーバー起動！');
   console.log('');
   console.log('  同じWiFiにつないだPC/スマホのブラウザで開いてね:');
   const urls = lanUrls();

@@ -1,4 +1,4 @@
-// めっちゃカメレオン LAN - クライアント
+// めっちゃカイトオン - クライアント
 
 import * as THREE from 'three';
 import { buildWorld, collide, groundAt, ceilingAt, ROOM } from './world.js';
@@ -1395,7 +1395,7 @@ function joinCards() {
   };
   const title = h('div', { class: 'card title' },
     h('div', { class: 'logo' }, '🦎'),
-    h('h1', {}, 'めっちゃカメレオン LAN'),
+    h('h1', {}, 'めっちゃカイトオン'),
     h('p', { class: 'muted' }, '体に絵を描いて背景に溶け込む、お絵かきかくれんぼ。PC・スマホのブラウザで対戦！'),
   );
   if (netMode === 'server') {
@@ -1446,7 +1446,7 @@ function inviteCard() {
       prompt('このURLを送ってね', url);
     }
   };
-  const shareBtn = navigator.share && h('button', { class: 'sub small', onclick: () => navigator.share({ title: 'めっちゃカメレオン LAN', text: `部屋コード ${roomCode} で遊ぼう！`, url }).catch(() => {}) }, '共有');
+  const shareBtn = navigator.share && h('button', { class: 'sub small', onclick: () => navigator.share({ title: 'めっちゃカイトオン', text: `部屋コード ${roomCode} で遊ぼう！`, url }).catch(() => {}) }, '共有');
   return h('div', { class: 'card' },
     h('h2', {}, '友だちを呼ぼう'),
     h('p', {}, '部屋コード：', h('span', { class: 'url', style: 'font-size:26px;letter-spacing:.12em' }, roomCode)),
