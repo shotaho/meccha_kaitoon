@@ -1,7 +1,7 @@
 {
   "name": "meccha-chameleon",
   "version": "1.0.0",
-  "description": "同じWiFi内で遊べる「カメレオン」風の正体隠し連想ワードゲーム",
+  "description": "体に絵を描いて背景に溶け込む、お絵かきかくれんぼ（LAN対戦・ブラウザ版）",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

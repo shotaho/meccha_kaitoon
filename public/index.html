@@ -2,19 +2,48 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1f8a4c">
-  <title>めっちゃカメレオン</title>
+  <title>めっちゃカメレオン LAN</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦎</text></svg>">
   <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three.module.min.js" } }
+  </script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="logo">🦎 めっちゃカメレオン</div>
-    <div id="conn" class="conn"></div>
-  </header>
-  <main id="app"></main>
-  <div id="toast" class="toast"></div>
-  <script src="app.js"></script>
+  <canvas id="view"></canvas>
+
+  <!-- 上部HUD -->
+  <div id="hud" class="hidden">
+    <div id="phaseLabel"></div>
+    <div id="timer"></div>
+    <div id="roleLabel"></div>
+  </div>
+  <div id="feed"></div>
+  <div id="crosshair" class="hidden"></div>
+  <div id="hint" class="hidden"></div>
+
+  <!-- 鬼の待機画面 -->
+  <div id="waitOverlay" class="hidden">
+    <div class="big">👹 あなたは鬼！</div>
+    <p>みんなが隠れています… 目をつぶって待っててね</p>
+    <div id="waitTimer" class="big"></div>
+  </div>
+
+  <!-- 隠れる側のツール -->
+  <div id="tools" class="hidden"></div>
+
+  <!-- スマホ用 -->
+  <div id="touch" class="hidden">
+    <div id="stick"><div id="knob"></div></div>
+    <div id="touchBtns"></div>
+  </div>
+
+  <!-- ロビー・結果などのパネル -->
+  <div id="panel"></div>
+
+  <div id="toast"></div>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
