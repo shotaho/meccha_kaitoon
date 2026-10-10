@@ -1,7 +1,10 @@
 // めっちゃカイトオン - クライアント
 
 import * as THREE from 'three';
-import { buildWorld, collide, groundAt, ceilingAt, ROOM } from './world.js';
+import { buildWorld, collide, groundAt, ceilingAt } from './world.js';
+import { MAPS, spotView } from './maps.js';
+import { paintCamo } from './camo.js';
+import { createCpuBrains } from './cpu.js';
 import { Character, POSES, BODY_RADIUS } from './character.js';
 import { detectServer, connectServer, hostP2P, joinP2P, makeRoomCode, normalizeCode } from './net.js';
 
@@ -81,7 +84,23 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('#222222');
 const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 100);
 camera.rotation.order = 'YXZ';
-const world = buildWorld(scene);
+let world = buildWorld(scene, 'house');
+
+// ステージを切り替える
+function ensureWorld(mapId) {
+  if (!MAPS[mapId] || world.id === mapId) return;
+  world.dispose();
+  world = buildWorld(scene, mapId);
+  resetFreeCam();
+  for (const c of chars.values()) c.camoKey = null;
+}
+
+function resetFreeCam() {
+  const b = world.bounds;
+  free.pos.set((b.x0 + b.x1) / 2, Math.min(b.h - 0.5, MAPS[world.id].outdoor ? 6 : 3), b.z1 - 2);
+  free.yaw = 0;
+  free.pitch = -0.35;
+}
 const raycaster = new THREE.Raycaster();
 
 function resize() {
@@ -254,6 +273,7 @@ function onMessage(m) {
       const prevRole = me()?.role;
       S = m;
       stateAt = performance.now();
+      ensureWorld(S.settings.map);
       if (prevPhase !== S.phase) onPhaseChange(prevPhase);
       else if (prevRole !== me()?.role) onPhaseChange(prevPhase);
       syncCharKinds();
@@ -291,7 +311,7 @@ function onMessage(m) {
     case 'paintAll':
       opsById.clear();
       for (const [id, ops] of Object.entries(m.paints)) opsById.set(id, ops);
-      for (const [id, c] of chars) c.replay(opsById.get(id) || []);
+      for (const [id, c] of chars) if (!playerInfo(id)?.cpu) c.replay(opsById.get(id) || []);
       rebuildGroups();
       break;
     case 'paint': {
@@ -427,9 +447,7 @@ function setViewMode(mode) {
     free.yaw = camera.rotation.y;
     free.pitch = camera.rotation.x;
     if (prev === 'lobby' || prev === 'none' || prev === 'wait') {
-      free.pos.set(0, 3, 6);
-      free.yaw = 0;
-      free.pitch = -0.35;
+      resetFreeCam();
     }
   }
   renderTools();
@@ -878,7 +896,7 @@ function pickColor(cx, cy) {
 
 function jump() {
   if (self.onGround) {
-    self.vy = 4.6;
+    self.vy = 6;
     self.onGround = false;
   }
 }
@@ -927,9 +945,15 @@ function step() {
       updateFree(dt);
       break;
     default:
-      lobbyT += dt * 0.08;
-      camera.position.set(Math.cos(lobbyT) * 8, 3.4, Math.sin(lobbyT) * 5);
-      camera.lookAt(0, 1, 0);
+      {
+        lobbyT += dt * 0.08;
+        const b = world.bounds;
+        const cx = (b.x0 + b.x1) / 2;
+        const cz = (b.z0 + b.z1) / 2;
+        const out = MAPS[world.id].outdoor;
+        camera.position.set(cx + Math.cos(lobbyT) * (b.x1 - b.x0) * 0.34, out ? 8 : b.h * 0.68, cz + Math.sin(lobbyT) * (b.z1 - b.z0) * 0.32);
+        camera.lookAt(cx, out ? 1.5 : 1, cz);
+      }
       break;
   }
 
@@ -949,6 +973,8 @@ function step() {
 
   for (const c of chars.values()) c.update(dt);
   updateVisibility();
+  updateCamo();
+  brains.update(dt);
 
   for (let i = splats.length - 1; i >= 0; i--) {
     const s = splats[i];
@@ -1012,9 +1038,9 @@ function updateHider(dt) {
     const v = vertInput();
     if (v) self.pos.y += v * 1.8 * dt;
   }
-  collide(world.colliders, self.pos, r, hgt);
+  collide(world.colliders, self.pos, r, hgt, world.bounds);
   const g = groundAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, r, 0.02);
-  const top = ceilingAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, r, hgt);
+  const top = ceilingAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, r, hgt, world.bounds);
   self.pos.y = clamp(self.pos.y, g, Math.max(g, top));
   updateOrbitCamera();
 }
@@ -1026,9 +1052,9 @@ function updateOrbitCamera() {
   const cp = Math.cos(orbit.pitch);
   const off = new THREE.Vector3(Math.sin(orbit.yaw) * cp, Math.sin(orbit.pitch), Math.cos(orbit.yaw) * cp).multiplyScalar(orbit.dist);
   const pos = tgt.clone().add(off);
-  pos.x = clamp(pos.x, ROOM.x0 + 0.1, ROOM.x1 - 0.1);
-  pos.z = clamp(pos.z, ROOM.z0 + 0.1, ROOM.z1 - 0.1);
-  pos.y = clamp(pos.y, 0.1, ROOM.h - 0.1);
+  pos.x = clamp(pos.x, world.bounds.x0 + 0.1, world.bounds.x1 - 0.1);
+  pos.z = clamp(pos.z, world.bounds.z0 + 0.1, world.bounds.z1 - 0.1);
+  pos.y = clamp(pos.y, 0.1, world.bounds.h - 0.1);
   camera.position.copy(pos);
   camera.lookAt(tgt);
 }
@@ -1043,7 +1069,7 @@ function updateSeeker(dt) {
   if (held.has('jump')) jump();
   self.vy -= 13 * dt;
   self.pos.y += self.vy * dt;
-  collide(world.colliders, self.pos, BODY_RADIUS, 1.7);
+  collide(world.colliders, self.pos, BODY_RADIUS, 1.7, world.bounds);
   const g = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.4);
   if (self.pos.y <= g) {
     self.pos.y = g;
@@ -1052,7 +1078,7 @@ function updateSeeker(dt) {
   } else {
     self.onGround = false;
   }
-  const top = ceilingAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, BODY_RADIUS, 1.7);
+  const top = ceilingAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, BODY_RADIUS, 1.7, world.bounds);
   if (self.pos.y > top) {
     self.pos.y = top;
     self.vy = Math.min(0, self.vy);
@@ -1070,12 +1096,57 @@ function updateFree(dt) {
   const sp = keys.has('ShiftLeft') ? 10 : 5;
   free.pos.add(fw.multiplyScalar(f * sp * dt)).add(rt.multiplyScalar(s * sp * dt));
   free.pos.y += v * sp * dt;
-  free.pos.x = clamp(free.pos.x, ROOM.x0 + 0.2, ROOM.x1 - 0.2);
-  free.pos.z = clamp(free.pos.z, ROOM.z0 + 0.2, ROOM.z1 - 0.2);
-  free.pos.y = clamp(free.pos.y, 0.3, ROOM.h - 0.2);
+  free.pos.x = clamp(free.pos.x, world.bounds.x0 + 0.2, world.bounds.x1 - 0.2);
+  free.pos.z = clamp(free.pos.z, world.bounds.z0 + 0.2, world.bounds.z1 - 0.2);
+  free.pos.y = clamp(free.pos.y, 0.3, world.bounds.h - 0.2);
   camera.position.copy(free.pos);
   camera.rotation.set(free.pitch, free.yaw, 0);
 }
+
+// CPU の擬態ペイント（1フレームに1体ずつ）
+function updateCamo() {
+  if (!S || S.phase === 'lobby' || world.id !== S.settings.map) return;
+  for (const [id, c] of chars) {
+    const info = playerInfo(id);
+    if (!info?.cpu || info.role !== 'hider' || info.spot == null || c.kind !== 'hider' || !c.target) continue;
+    const key = `${S.roundNo}:${S.settings.map}:${info.spot}:${S.settings.cpuLevel}`;
+    if (c.camoKey === key) continue;
+    const spot = MAPS[S.settings.map].spots[info.spot];
+    if (!spot) continue;
+    c.snap();
+    paintCamo(renderer, scene, c, spotView(spot), S.settings.cpuLevel, (hidden) => {
+      if (hidden) {
+        for (const o of chars.values()) o.root.visible = false;
+        for (const sp of splats) sp.m.visible = false;
+      } else {
+        for (const sp of splats) sp.m.visible = true;
+        updateVisibility();
+      }
+    });
+    c.camoKey = key;
+    return;
+  }
+}
+
+const brains = createCpuBrains({
+  renderer,
+  scene,
+  chars,
+  send: (m) => send(m),
+  getState: () => S,
+  getWorld: () => world,
+  myId: () => myId,
+  // 見つけ判定の描画中は、鬼と名札を隠して対象だけを出し入れする
+  setProbe(targetId, show) {
+    for (const [id, c] of chars) {
+      if (c.label) c.label.visible = false;
+      c.setOutline(null);
+      if (id === targetId) c.root.visible = show;
+      else if (c.kind === 'seeker') c.root.visible = false;
+    }
+  },
+  endProbe: () => updateVisibility(),
+});
 
 function updateVisibility() {
   const phase = S?.phase;
@@ -1279,6 +1350,7 @@ function playerList(opts = {}) {
         p.name,
         p.id === S.hostId && h('span', { class: 'tag host' }, 'ホスト'),
         p.id === myId && h('span', { class: 'tag' }, 'あなた'),
+        p.cpu && h('span', { class: 'tag' }, '🤖 CPU'),
         p.role === 'seeker' && S.phase !== 'lobby' && h('span', { class: 'tag seek' }, '鬼'),
         !p.online && h('span', { class: 'tag' }, '切断中'),
       ),
@@ -1311,7 +1383,7 @@ function settingsCard() {
   const sel = (key, options, fmt) => {
     const s = h('select', {
       disabled: !editable,
-      onchange: (e) => send({ t: 'settings', settings: { [key]: key === 'mode' ? e.target.value : Number(e.target.value) } }),
+      onchange: (e) => send({ t: 'settings', settings: { [key]: ['mode', 'map', 'cpuLevel'].includes(key) ? e.target.value : Number(e.target.value) } }),
     }, options.map((o) => h('option', { value: o }, fmt(o))));
     s.value = String(st[key]);
     return s;
@@ -1320,6 +1392,9 @@ function settingsCard() {
   return h('div', { class: 'card' },
     h('h2', {}, 'ルール設定', !editable && h('span', { class: 'muted' }, '（ホストが変更できます）')),
     h('div', { class: 'settings' },
+      h('label', {}, 'ステージ'), sel('map', Object.keys(MAPS), (o) => MAPS[o].name),
+      h('label', {}, 'CPU'), sel('cpus', [0, 1, 2, 3, 4, 5, 6, 7], (o) => (o ? `${o}人` : 'なし')),
+      st.cpus > 0 && h('label', {}, 'CPUの強さ'), st.cpus > 0 && sel('cpuLevel', ['easy', 'normal', 'hard'], (o) => ({ easy: 'よわい', normal: 'ふつう', hard: 'つよい' })[o]),
       h('label', {}, 'モード'), sel('mode', ['normal', 'infect'], (o) => (o === 'normal' ? 'ノーマル' : '増え鬼（見つかると鬼になる）')),
       h('label', {}, '鬼の人数'), sel('seekers', [1, 2, 3, 4], (o) => `${o}人`),
       h('label', {}, '準備タイム'), sel('prepSec', [30, 60, 90, 120, 150, 180, 240, 300], (o) => `${o}秒`),
@@ -1329,7 +1404,7 @@ function settingsCard() {
     editable
       ? h('button', { style: 'width:100%', disabled: n < 1, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? '次のラウンドへ！' : 'ゲーム開始！')
       : h('p', { class: 'muted' }, 'ホストの開始を待っています…'),
-    editable && n === 1 && h('p', { class: 'muted' }, '1人なら練習モード：隠れて、自分の擬態をいろんな角度からじっくり見られます'),
+    editable && n === 1 && !st.cpus && h('p', { class: 'muted' }, '1人なら練習モード：隠れて、自分の擬態をいろんな角度からじっくり見られます。CPUを入れると対戦できます'),
   );
 }
 

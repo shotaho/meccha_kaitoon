@@ -634,4 +634,427 @@ const GEN = {
     g.fillRect(0, 58, 64, 6);
     return c;
   },
+
+  // ===== ハンバーガーショップ =====
+
+  asphalt() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(101);
+    g.fillStyle = '#5b5e63';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 4000; i++) {
+      const v = 70 + Math.floor(r() * 60);
+      g.fillStyle = `rgba(${v},${v},${v + 4},.5)`;
+      g.fillRect(r() * 256, r() * 256, 2, 2);
+    }
+    return c;
+  },
+
+  checker() {
+    const [c, g] = canvas(128, 128);
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        g.fillStyle = (x + y) % 2 ? '#f4efe6' : '#c8242c';
+        g.fillRect(x * 32, y * 32, 32, 32);
+      }
+    }
+    return c;
+  },
+
+  redBrick() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(102);
+    g.fillStyle = '#d9cfc2';
+    g.fillRect(0, 0, 256, 256);
+    for (let row = 0; row < 16; row++) {
+      const off = row % 2 ? 32 : 0;
+      for (let col = -1; col < 5; col++) {
+        g.fillStyle = hsl(356 + r() * 8, 55 + r() * 15, 30 + r() * 8);
+        g.fillRect(col * 64 + off + 2, row * 16 + 2, 60, 12);
+      }
+    }
+    return c;
+  },
+
+  yellowWall() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#f6c533';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = 'rgba(255,255,255,.18)';
+    for (let i = 0; i < 128; i += 16) g.fillRect(i, 0, 6, 128);
+    return c;
+  },
+
+  wallBand() {
+    // 下が赤、上が黄色の内壁
+    const [c, g] = canvas(64, 256);
+    g.fillStyle = '#f6c533';
+    g.fillRect(0, 0, 64, 256);
+    g.fillStyle = '#c8242c';
+    g.fillRect(0, 170, 64, 86);
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 164, 64, 6);
+    return c;
+  },
+
+  menuBoard() {
+    const [c, g] = canvas(1024, 192);
+    g.fillStyle = '#1d1d1f';
+    g.fillRect(0, 0, 1024, 192);
+    const items = ['burger', 'fries', 'drink', 'burger2', 'nugget', 'ice'];
+    items.forEach((it, i) => {
+      const x = 12 + i * 168;
+      g.fillStyle = i % 2 ? '#c8242c' : '#f6c533';
+      g.fillRect(x, 12, 156, 168);
+      drawFood(g, it, x + 78, 80, 1.1);
+      g.fillStyle = '#ffffff';
+      g.fillRect(x + 20, 146, 116, 10);
+      g.fillRect(x + 40, 162, 76, 8);
+    });
+    return c;
+  },
+
+  driveMenu() {
+    const [c, g] = canvas(256, 192);
+    g.fillStyle = '#1d1d1f';
+    g.fillRect(0, 0, 256, 192);
+    for (let k = 0; k < 6; k++) {
+      const x = 10 + (k % 3) * 82;
+      const y = 10 + Math.floor(k / 3) * 90;
+      g.fillStyle = k % 2 ? '#c8242c' : '#f6c533';
+      g.fillRect(x, y, 74, 82);
+      drawFood(g, ['burger', 'fries', 'drink', 'nugget', 'ice', 'burger2'][k], x + 37, y + 36, 0.5);
+      g.fillStyle = '#fff';
+      g.fillRect(x + 10, y + 66, 54, 6);
+    }
+    return c;
+  },
+
+  posterBurger() {
+    const [c, g] = canvas(160, 210);
+    g.fillStyle = '#c8242c';
+    g.fillRect(0, 0, 160, 210);
+    drawFood(g, 'burger', 80, 95, 1.2);
+    g.fillStyle = '#f6c533';
+    g.fillRect(20, 170, 120, 14);
+    return c;
+  },
+
+  posterFries() {
+    const [c, g] = canvas(160, 210);
+    g.fillStyle = '#f6c533';
+    g.fillRect(0, 0, 160, 210);
+    drawFood(g, 'fries', 80, 95, 1.2);
+    g.fillStyle = '#c8242c';
+    g.fillRect(20, 170, 120, 14);
+    return c;
+  },
+
+  posterDrink() {
+    const [c, g] = canvas(160, 210);
+    g.fillStyle = '#2a7bd0';
+    g.fillRect(0, 0, 160, 210);
+    drawFood(g, 'drink', 80, 95, 1.2);
+    g.fillStyle = '#fff';
+    g.fillRect(20, 170, 120, 14);
+    return c;
+  },
+
+  signBurger() {
+    const [c, g] = canvas(256, 192);
+    g.fillStyle = '#c8242c';
+    g.fillRect(0, 0, 256, 192);
+    g.strokeStyle = '#f6c533';
+    g.lineWidth = 12;
+    g.strokeRect(6, 6, 244, 180);
+    drawFood(g, 'burger', 128, 96, 1.5);
+    return c;
+  },
+
+  counterFront() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#c8242c';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#f6c533';
+    g.fillRect(0, 20, 128, 14);
+    g.fillStyle = 'rgba(0,0,0,.15)';
+    for (let i = 0; i < 128; i += 32) g.fillRect(i, 40, 2, 88);
+    return c;
+  },
+
+  stainless() {
+    const [c, g] = canvas(128, 128);
+    const grd = g.createLinearGradient(0, 0, 128, 128);
+    grd.addColorStop(0, '#c7ccd1');
+    grd.addColorStop(0.5, '#eef1f3');
+    grd.addColorStop(1, '#b4bac0');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = 'rgba(80,90,100,.35)';
+    g.strokeRect(1, 1, 126, 126);
+    return c;
+  },
+
+  grill() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#2b2b2b';
+    g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = '#555';
+    g.lineWidth = 3;
+    for (let i = 8; i < 128; i += 12) {
+      g.beginPath();
+      g.moveTo(0, i);
+      g.lineTo(128, i);
+      g.stroke();
+    }
+    g.fillStyle = '#6b3a1e';
+    for (const [x, y] of [[30, 40], [80, 40], [55, 85], [100, 90]]) {
+      g.beginPath();
+      g.arc(x, y, 14, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  drinkMachine() {
+    const [c, g] = canvas(128, 256);
+    g.fillStyle = '#d9dde1';
+    g.fillRect(0, 0, 128, 256);
+    g.fillStyle = '#c8242c';
+    g.fillRect(0, 0, 128, 60);
+    const cols = ['#3b1f12', '#f28c28', '#2bb24c', '#2a7bd0'];
+    cols.forEach((col, i) => {
+      g.fillStyle = col;
+      g.fillRect(10 + i * 29, 70, 22, 40);
+      g.fillStyle = '#555';
+      g.fillRect(16 + i * 29, 112, 10, 18);
+    });
+    g.fillStyle = '#9aa1a8';
+    g.fillRect(6, 150, 116, 10);
+    return c;
+  },
+
+  trashBin() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#8a5a34';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#5b3a20';
+    g.fillRect(14, 24, 40, 16);
+    g.fillRect(74, 24, 40, 16);
+    g.fillStyle = '#f6c533';
+    g.fillRect(14, 50, 40, 6);
+    g.fillStyle = '#2a7bd0';
+    g.fillRect(74, 50, 40, 6);
+    return c;
+  },
+
+  register() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#2b2b2b';
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#5fd0ff';
+    g.fillRect(8, 8, 48, 24);
+    g.fillStyle = '#888';
+    for (let i = 0; i < 4; i++) for (let k = 0; k < 2; k++) g.fillRect(8 + i * 12, 40 + k * 10, 8, 6);
+    return c;
+  },
+
+  racks() {
+    const [c, g] = canvas(128, 256);
+    const r = rng(103);
+    g.fillStyle = '#9aa1a8';
+    g.fillRect(0, 0, 128, 256);
+    for (let s = 0; s < 4; s++) {
+      g.fillStyle = '#6c7278';
+      g.fillRect(0, s * 64 + 58, 128, 6);
+      for (let k = 0; k < 4; k++) {
+        g.fillStyle = r() < 0.5 ? '#c8242c' : r() < 0.5 ? '#f6c533' : '#e8e2d6';
+        g.fillRect(6 + k * 30, s * 64 + 18, 26, 40);
+      }
+    }
+    return c;
+  },
+
+  shopWindow() {
+    const [c, g] = canvas(256, 128);
+    const grd = g.createLinearGradient(0, 0, 256, 128);
+    grd.addColorStop(0, '#8fc8ea');
+    grd.addColorStop(0.5, '#d8eef9');
+    grd.addColorStop(1, '#7dbbe0');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 256, 128);
+    g.strokeStyle = '#3a3a3a';
+    g.lineWidth = 8;
+    g.strokeRect(0, 0, 256, 128);
+    g.beginPath();
+    g.moveTo(128, 0);
+    g.lineTo(128, 128);
+    g.stroke();
+    return c;
+  },
+
+  awning() {
+    const [c, g] = canvas(64, 64);
+    for (let i = 0; i < 4; i++) {
+      g.fillStyle = i % 2 ? '#ffffff' : '#c8242c';
+      g.fillRect(i * 16, 0, 16, 64);
+    }
+    return c;
+  },
+
+  parking() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(104);
+    g.fillStyle = '#5b5e63';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 3000; i++) {
+      const v = 70 + Math.floor(r() * 60);
+      g.fillStyle = `rgba(${v},${v},${v + 4},.5)`;
+      g.fillRect(r() * 256, r() * 256, 2, 2);
+    }
+    g.fillStyle = '#f2f2f2';
+    g.fillRect(0, 0, 8, 200);
+    return c;
+  },
+
+  laneArrow() {
+    const [c, g] = canvas(128, 256);
+    g.clearRect(0, 0, 128, 256);
+    g.fillStyle = '#5b5e63';
+    g.fillRect(0, 0, 128, 256);
+    g.fillStyle = '#f2f2f2';
+    g.fillRect(52, 90, 24, 150);
+    g.beginPath();
+    g.moveTo(64, 20);
+    g.lineTo(110, 100);
+    g.lineTo(18, 100);
+    g.closePath();
+    g.fill();
+    return c;
+  },
+
+  hazard() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#f6c533';
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#1d1d1f';
+    for (let i = -2; i < 4; i++) {
+      g.beginPath();
+      g.moveTo(i * 32, 64);
+      g.lineTo(i * 32 + 16, 64);
+      g.lineTo(i * 32 + 48, 0);
+      g.lineTo(i * 32 + 32, 0);
+      g.closePath();
+      g.fill();
+    }
+    return c;
+  },
+
+  curb() {
+    const [c, g] = canvas(64, 32);
+    g.fillStyle = '#c9c9c4';
+    g.fillRect(0, 0, 64, 32);
+    g.fillStyle = '#f6c533';
+    g.fillRect(0, 0, 32, 32);
+    return c;
+  },
+
+  hedge() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(105);
+    g.fillStyle = '#2f6b2f';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 260; i++) {
+      g.fillStyle = hsl(95 + r() * 35, 45, 22 + r() * 22);
+      g.beginPath();
+      g.arc(r() * 128, r() * 128, 2 + r() * 4, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  glassDark() {
+    const [c, g] = canvas(64, 64);
+    const grd = g.createLinearGradient(0, 0, 64, 64);
+    grd.addColorStop(0, '#2c3e50');
+    grd.addColorStop(1, '#5d7a93');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 64);
+    return c;
+  },
+
+  tire() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#1b1b1b';
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#3a3a3a';
+    for (let i = 0; i < 64; i += 8) g.fillRect(i, 0, 3, 64);
+    return c;
+  },
 };
+
+// 食べ物のイラスト（ロゴではない簡単な絵）
+function drawFood(g, kind, cx, cy, s) {
+  g.save();
+  g.translate(cx, cy);
+  g.scale(s, s);
+  const ell = (x, y, rx, ry, col) => {
+    g.fillStyle = col;
+    g.beginPath();
+    g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    g.fill();
+  };
+  if (kind === 'burger' || kind === 'burger2') {
+    ell(0, -18, 46, 26, '#e0a84a');
+    g.fillStyle = '#e0a84a';
+    g.fillRect(-46, -18, 92, 12);
+    g.fillStyle = '#5bb33a';
+    g.fillRect(-50, -6, 100, 8);
+    if (kind === 'burger2') {
+      g.fillStyle = '#f2c230';
+      g.fillRect(-46, 2, 92, 6);
+    }
+    g.fillStyle = '#5a2d16';
+    g.fillRect(-48, 6, 96, 14);
+    ell(0, 26, 46, 10, '#d8963c');
+    g.fillStyle = '#fff6d8';
+    for (const [x, y] of [[-20, -30], [0, -36], [18, -28], [-6, -22]]) ell(x, y, 3, 2, '#fff6d8');
+  } else if (kind === 'fries') {
+    g.fillStyle = '#f2c230';
+    for (let i = -4; i <= 4; i++) g.fillRect(i * 9 - 4, -44 + Math.abs(i) * 4, 8, 50);
+    g.fillStyle = '#c8242c';
+    g.beginPath();
+    g.moveTo(-40, -6);
+    g.lineTo(40, -6);
+    g.lineTo(30, 44);
+    g.lineTo(-30, 44);
+    g.closePath();
+    g.fill();
+  } else if (kind === 'drink') {
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(-28, -30);
+    g.lineTo(28, -30);
+    g.lineTo(20, 44);
+    g.lineTo(-20, 44);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#c8242c';
+    g.fillRect(-26, -2, 52, 14);
+    g.fillStyle = '#f6c533';
+    g.fillRect(4, -56, 6, 30);
+  } else if (kind === 'nugget') {
+    for (const [x, y] of [[-20, -10], [16, -14], [-6, 14], [24, 16]]) ell(x, y, 18, 13, '#d9a14a');
+  } else if (kind === 'ice') {
+    g.fillStyle = '#e0a84a';
+    g.beginPath();
+    g.moveTo(-20, -4);
+    g.lineTo(20, -4);
+    g.lineTo(0, 46);
+    g.closePath();
+    g.fill();
+    ell(0, -16, 24, 20, '#fff6e8');
+    ell(0, -34, 14, 12, '#fff6e8');
+  }
+  g.restore();
+}

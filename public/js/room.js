@@ -7,18 +7,22 @@
 //   const h = room.addConnection({ send(str) {...}, close() {...} });
 //   受信したら h.message(str) / 切断したら h.close()
 
-const MAX_PLAYERS = 16;
+import { MAPS, groundY } from './maps.js';
+
+const MAX_PLAYERS = 16; // 人間の最大人数（CPU は別）
+const MAX_CPUS = 7;
 const MIN_PLAYERS = 1; // 1人なら練習モード（鬼なし）
 const TICK_MS = 66; // 位置の配信間隔（約15Hz）
 const SHOT_COOLDOWN_MS = 600;
 const MAX_OPS_PER_PLAYER = 20000;
-const SEEKER_SPAWN = [8, 0, 5];
+const CPU_LEVELS = new Set(['easy', 'normal', 'hard']);
 
 const LIMITS = {
   prepSec: [20, 600],
   huntSec: [20, 600],
   penaltySec: [0, 30],
   seekers: [1, 8],
+  cpus: [0, MAX_CPUS],
 };
 
 const POSES = new Set(['stand', 'crouch', 'curl', 'lie', 'banzai', 'star', 'flip']);
@@ -89,20 +93,69 @@ export function createRoom({ getUrls = () => [] } = {}) {
     prepSec: 120,
     huntSec: 120,
     penaltySec: 5,
+    map: 'house',
+    cpus: 0,
+    cpuLevel: 'normal',
   };
 
   function send(p, msg) {
     p.conn?.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
 
+  // 参加中（接続している人間か CPU）
   function online() {
-    return [...players.values()].filter((p) => p.conn);
+    return [...players.values()].filter((p) => p.conn || p.cpu);
+  }
+
+  function humans() {
+    return [...players.values()].filter((p) => !p.cpu);
+  }
+
+  // CPU の人数を設定に合わせる
+  function syncCpus() {
+    const cpus = [...players.values()].filter((p) => p.cpu);
+    while (cpus.length > settings.cpus) players.delete(cpus.pop().id);
+    let n = 1;
+    while (cpus.length < settings.cpus) {
+      const used = new Set([...players.values()].map((q) => q.name));
+      while (used.has(`CPU${n}`)) n++;
+      const p = newPlayer(`CPU${n}`);
+      p.cpu = true;
+      p.joinedAt = Date.now() + 1e12 + n; // 一覧では人間の後ろ
+      players.set(p.id, p);
+      cpus.push(p);
+    }
+  }
+
+  function newPlayer(name) {
+    return {
+      id: makeId(),
+      name,
+      score: 0,
+      joinedAt: Date.now(),
+      conn: null,
+      cpu: false,
+      seekerCount: 0,
+      role: phase === 'lobby' ? 'none' : 'spectator',
+      found: false,
+      foundBy: null,
+      spot: null,
+      tf: { p: [0, 0, 0], r: [0, 0, 0], pose: 'stand', look: [0, 0] },
+      ops: [],
+      lastShot: 0,
+    };
+  }
+
+  function seekerTf() {
+    const m = MAPS[settings.map];
+    const [x, y, z] = m.seekerSpawn;
+    return { p: [x, y ?? groundY(settings.map, x, z), z], r: [m.seekerLook + Math.PI, 0, 0], pose: 'stand', look: [m.seekerLook, 0] };
   }
 
   function ensureHost() {
     const h = players.get(hostId);
     if (h && h.conn) return;
-    const c = online().sort((a, b) => a.joinedAt - b.joinedAt);
+    const c = [...players.values()].filter((p) => p.conn).sort((a, b) => a.joinedAt - b.joinedAt);
     if (c.length) hostId = c[0].id;
   }
 
@@ -111,7 +164,9 @@ export function createRoom({ getUrls = () => [] } = {}) {
       id: p.id,
       name: p.name,
       score: p.score,
-      online: !!p.conn,
+      online: !!p.conn || p.cpu,
+      cpu: p.cpu,
+      spot: p.spot,
       role: p.role,
       found: p.found,
       foundBy: p.foundBy,
@@ -166,22 +221,34 @@ export function createRoom({ getUrls = () => [] } = {}) {
     foundLog = [];
     roundResult = null;
     let hi = 0;
-    const hiderCount = list.length - nSeek;
+    const map = MAPS[settings.map];
+    const hiderCount = list.filter((p) => !p.cpu).length - [...seekers].filter((id) => !players.get(id).cpu).length;
+    // CPU が隠れる場所をランダムに選ぶ（重ならないように）
+    const spotIdx = map.spots.map((_, i) => i).sort(() => Math.random() - 0.5);
     for (const p of players.values()) {
       p.found = false;
       p.foundBy = null;
       p.ops = [];
       p.lastShot = 0;
-      if (!p.conn) {
+      p.spot = null;
+      if (!p.conn && !p.cpu) {
         p.role = 'spectator';
       } else if (seekers.has(p.id)) {
         p.role = 'seeker';
         p.seekerCount++;
-        p.tf = { p: SEEKER_SPAWN.slice(), r: [Math.PI, 0, 0], pose: 'stand', look: [1.0, 0] };
+        p.tf = seekerTf();
+      } else if (p.cpu) {
+        p.role = 'hider';
+        p.spot = spotIdx.length ? spotIdx.pop() : 0;
+        const sp = map.spots[p.spot];
+        p.tf = { p: sp.p.slice(), r: [sp.yaw, 0, 0], pose: sp.pose, look: [0, 0] };
       } else {
         p.role = 'hider';
         const a = (hi++ / Math.max(1, hiderCount)) * Math.PI * 2;
-        p.tf = { p: [Math.cos(a) * 2.5 - 1, 0, Math.sin(a) * 2 + 1], r: [0, 0, 0], pose: 'stand', look: [0, 0] };
+        const { c, rx, rz } = map.hiderSpawn;
+        const x = c[0] + Math.cos(a) * rx;
+        const z = c[1] + Math.sin(a) * rz;
+        p.tf = { p: [x, groundY(settings.map, x, z), z], r: [0, 0, 0], pose: 'stand', look: [0, 0] };
       }
     }
     phase = 'prep';
@@ -200,7 +267,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
     phase = 'hunt';
     phaseEndsAt = Date.now() + settings.huntSec * 1000;
     for (const p of players.values()) {
-      if (p.role === 'seeker') p.tf = { p: SEEKER_SPAWN.slice(), r: [Math.PI, 0, 0], pose: 'stand', look: [1.0, 0] };
+      if (p.role === 'seeker') p.tf = seekerTf();
     }
     broadcast(transformsMsg(true));
     systemMsg('鬼が動き出した！');
@@ -228,12 +295,12 @@ export function createRoom({ getUrls = () => [] } = {}) {
     if (phase !== 'hunt' && phase !== 'prep') return;
     const hiders = [...players.values()].filter((p) => p.role === 'hider' && !p.found);
     if (solo) {
-      if (!hiders.some((p) => p.conn)) endRound('練習を終了しました');
+      if (!hiders.some((p) => p.conn || p.cpu)) endRound('練習を終了しました');
       return;
     }
     if (phase === 'hunt' && !hiders.length) return endRound('全員見つかった！');
     if (!online().some((p) => p.role === 'seeker')) return endRound('鬼がいなくなった…');
-    if (!hiders.some((p) => p.conn) && phase === 'prep') return endRound('隠れる人がいなくなった…');
+    if (!hiders.some((p) => p.conn || p.cpu) && phase === 'prep') return endRound('隠れる人がいなくなった…');
   }
 
   timers.push(
@@ -271,7 +338,8 @@ export function createRoom({ getUrls = () => [] } = {}) {
         if (validVec(msg.look, 2)) p.tf.look = msg.look;
         const canMove = (p.role === 'hider' && phase === 'prep') || (p.role === 'seeker' && phase === 'hunt');
         if (!canMove) return;
-        if (validVec(msg.p, 3)) p.tf.p = [clamp(msg.p[0], -14, 14), clamp(msg.p[1], -1, 6), clamp(msg.p[2], -10, 10)];
+        const b = MAPS[settings.map].bounds;
+        if (validVec(msg.p, 3)) p.tf.p = [clamp(msg.p[0], b.x0, b.x1), clamp(msg.p[1], -1, b.h), clamp(msg.p[2], b.z0, b.z1)];
         if (validVec(msg.r, 3)) p.tf.r = msg.r;
         if (POSES.has(msg.pose)) p.tf.pose = msg.pose;
         return;
@@ -334,9 +402,12 @@ export function createRoom({ getUrls = () => [] } = {}) {
         if (!isHost || (phase !== 'lobby' && phase !== 'result')) return;
         const s = msg.settings || {};
         if (s.mode === 'normal' || s.mode === 'infect') settings.mode = s.mode;
+        if (typeof s.map === 'string' && MAPS[s.map]) settings.map = s.map;
+        if (CPU_LEVELS.has(s.cpuLevel)) settings.cpuLevel = s.cpuLevel;
         for (const k of Object.keys(LIMITS)) {
           if (isNum(s[k])) settings[k] = clamp(Math.round(s[k]), LIMITS[k][0], LIMITS[k][1]);
         }
+        syncCpus();
         broadcastState();
         return;
       }
@@ -366,6 +437,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
         if (!isHost || msg.target === p.id) return;
         const t = players.get(msg.target);
         if (!t) return;
+        if (t.cpu) {
+          if (phase !== 'lobby' && phase !== 'result') return;
+          settings.cpus = Math.max(0, settings.cpus - 1);
+        }
         send(t, { t: 'kicked' });
         const c = t.conn;
         t.conn = null;
@@ -374,6 +449,14 @@ export function createRoom({ getUrls = () => [] } = {}) {
         broadcast({ t: 'left', id: t.id });
         checkEnd();
         broadcastState();
+        return;
+      }
+      case 'cpu': {
+        // CPU 鬼の動きはホストのブラウザが計算して送ってくる
+        if (!isHost || !msg.msg || typeof msg.msg !== 'object') return;
+        const c = players.get(msg.id);
+        if (!c || !c.cpu || (msg.msg.t !== 'tf' && msg.msg.t !== 'shoot')) return;
+        handle(c, msg.msg);
         return;
       }
       case 'resetScores': {
@@ -388,25 +471,12 @@ export function createRoom({ getUrls = () => [] } = {}) {
   function join(conn, msg) {
     const name = cleanText(msg.name, 12);
     let p = typeof msg.id === 'string' ? players.get(msg.id) : null;
-    if (!p) {
-      if (players.size >= MAX_PLAYERS) {
+    if (!p || p.cpu) {
+      if (humans().length >= MAX_PLAYERS) {
         conn.send(JSON.stringify({ t: 'error', text: `満員です（最大${MAX_PLAYERS}人）` }));
         return null;
       }
-      p = {
-        id: makeId(),
-        name: name || `プレイヤー${players.size + 1}`,
-        score: 0,
-        joinedAt: Date.now(),
-        conn: null,
-        seekerCount: 0,
-        role: phase === 'lobby' ? 'none' : 'spectator',
-        found: false,
-        foundBy: null,
-        tf: { p: [0, 0, 0], r: [0, 0, 0], pose: 'stand', look: [0, 0] },
-        ops: [],
-        lastShot: 0,
-      };
+      p = newPlayer(name || `プレイヤー${humans().length + 1}`);
       players.set(p.id, p);
     } else if (name) {
       p.name = name;
