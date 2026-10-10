@@ -9,7 +9,6 @@ import { createRoom } from './room.js';
 
 const PREFIX = 'meccha-kaitoon-room-';
 const CHUNK = 15000; // DataChannel の1メッセージの大きさを抑える
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export async function detectServer() {
   // GitHub Pages には Node.js サーバーはいない
@@ -23,16 +22,16 @@ export async function detectServer() {
 }
 
 export function makeRoomCode() {
-  let s = '';
-  for (let i = 0; i < 5; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return s;
+  // 4桁の数字（0000〜9999）
+  return String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
 
 export function normalizeCode(s) {
+  // 全角数字も受け付ける
   return String(s || '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, 8);
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[^0-9]/g, '')
+    .slice(0, 4);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,8 +117,8 @@ function PeerCtor() {
 
 const RETRY_TYPES = new Set(['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected', 'webrtc']);
 
-// 部屋を作る（このブラウザがホストになる）
-export function hostP2P(code, shareUrl, cb) {
+// 部屋を作る（このブラウザがホストになる）。fresh = 新しく作る部屋（番号が使用中なら cb.onIdTaken）
+export function hostP2P(code, shareUrl, cb, fresh = false) {
   const Peer = PeerCtor();
   let peer = null;
   let room = null;
@@ -163,13 +162,19 @@ export function hostP2P(code, shareUrl, cb) {
     peer.on('error', (err) => {
       if (closed) return;
       if (err.type === 'unavailable-id' && !room) {
+        if (fresh) {
+          // 新しく作ろうとした番号が他の部屋で使われていた
+          peer.destroy();
+          closed = true;
+          return cb.onIdTaken?.();
+        }
         // 再読み込み直後は前の接続が残っていることがあるので、少し待って取り直す
         if (attempts++ < 8) {
           cb.onStatus?.('部屋を準備しています…');
           peer.destroy();
           setTimeout(() => !closed && start(), 2500);
         } else {
-          cb.onError('その部屋コードは使われています。別の部屋を作ってね');
+          cb.onError('その部屋番号は使われています。別の部屋を作ってね');
         }
         return;
       }
@@ -242,7 +247,7 @@ export function joinP2P(code, cb) {
     peer.on('error', (err) => {
       if (closed) return;
       if (err.type === 'peer-unavailable') {
-        if (!everOpened) return cb.onError(`部屋「${code}」が見つかりません。コードを確認してね`);
+        if (!everOpened) return cb.onError(`部屋「${code}」が見つかりません。番号を確認してね`);
         cb.onStatus?.('ホストを探しています…');
         return retry(3000);
       }

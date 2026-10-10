@@ -179,7 +179,13 @@ const callbacks = {
     leaveRoom();
   },
   onStatus: (text) => toast(text),
+  // 新しく作ろうとした部屋番号が使用中だったので、別の番号で作り直す
+  onIdTaken: () => connect('host', makeRoomCode(), true),
 };
+
+function defaultName() {
+  return `ゲスト${Math.floor(Math.random() * 900) + 100}`;
+}
 
 function shareUrl(code) {
   const q = new URLSearchParams({ room: code });
@@ -189,7 +195,7 @@ function shareUrl(code) {
 }
 
 // 接続を始める。p2p では mode = 'host' | 'join'
-function connect(mode, code) {
+function connect(mode, code, fresh = false) {
   link?.close();
   if (netMode === 'server') {
     myId = store.get(idKey());
@@ -202,7 +208,7 @@ function connect(mode, code) {
     sess.set('hosting', hosting ? '1' : '');
     history.replaceState(null, '', shareUrl(code));
     try {
-      link = hosting ? hostP2P(code, shareUrl(code), callbacks) : joinP2P(code, callbacks);
+      link = hosting ? hostP2P(code, shareUrl(code), callbacks, fresh) : joinP2P(code, callbacks);
     } catch (e) {
       toast(e.message);
       link = null;
@@ -1089,7 +1095,7 @@ function updateVisibility() {
         if (info.found) {
           outline = '#ff3b6b';
           label = id !== myId;
-        } else if (phase === 'result') {
+        } else if (phase === 'result' && !S.result?.solo) {
           outline = Math.sin(t * 6) > -0.3 ? '#ffd400' : null;
           label = true;
         } else if (id !== myId && myRole !== 'seeker') {
@@ -1321,9 +1327,9 @@ function settingsCard() {
       h('label', {}, 'はずれペナルティ'), sel('penaltySec', [0, 2, 3, 5, 10], (o) => (o ? `-${o}秒` : 'なし')),
     ),
     editable
-      ? h('button', { style: 'width:100%', disabled: n < 2, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? '次のラウンドへ！' : 'ゲーム開始！')
+      ? h('button', { style: 'width:100%', disabled: n < 1, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? '次のラウンドへ！' : 'ゲーム開始！')
       : h('p', { class: 'muted' }, 'ホストの開始を待っています…'),
-    editable && n < 2 && h('p', { class: 'muted' }, '2人以上で遊べます'),
+    editable && n === 1 && h('p', { class: 'muted' }, '1人なら練習モード：隠れて、自分の擬態をいろんな角度からじっくり見られます'),
   );
 }
 
@@ -1350,7 +1356,9 @@ function renderPanel() {
     const r = S.result || {};
     out.push(
       h('div', { class: 'card' },
-        h('div', { class: `banner ${r.winner === 'hiders' ? 'h' : 's'}` }, r.winner === 'hiders' ? '🦎 隠れる側の勝ち！' : '👹 鬼の勝ち！'),
+        r.solo
+          ? h('div', { class: 'banner h' }, '🎨 練習おしまい！')
+          : h('div', { class: `banner ${r.winner === 'hiders' ? 'h' : 's'}` }, r.winner === 'hiders' ? '🦎 隠れる側の勝ち！' : '👹 鬼の勝ち！'),
         h('p', { style: 'text-align:center' }, r.reason),
         (r.survivors || []).length > 0 && h('p', {}, '逃げ切り：', r.survivors.map(nameOf).join('、'), '（+3点）'),
         S.foundLog.length > 0 && h('div', {},
@@ -1382,13 +1390,9 @@ function renderPanel() {
 }
 
 function joinCards() {
-  const nameInput = h('input', { type: 'text', placeholder: 'ニックネーム（12文字まで）', maxlength: 12, value: store.get('name') || '' });
+  const nameInput = h('input', { type: 'text', placeholder: 'ニックネーム（なしでもOK）', maxlength: 12, value: store.get('name') || '' });
   const takeName = () => {
-    const name = nameInput.value.trim();
-    if (!name) {
-      toast('名前を入れてね');
-      return false;
-    }
+    const name = nameInput.value.trim() || defaultName();
     store.set('name', name);
     beep(660, 0.08);
     return true;
@@ -1404,13 +1408,13 @@ function joinCards() {
     return [title, h('div', { class: 'card' }, h('h2', {}, '参加する'), h('div', { class: 'row' }, nameInput, h('button', { onclick: go }, 'はじめる'))), rulesCard()];
   }
   const urlCode = normalizeCode(new URLSearchParams(location.search).get('room'));
-  const codeInput = h('input', { type: 'text', placeholder: '部屋コード（例：K7QX2）', maxlength: 8, value: urlCode, style: 'text-transform:uppercase' });
+  const codeInput = h('input', { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', placeholder: '部屋番号（4桁の数字）', maxlength: 4, value: urlCode, style: 'letter-spacing:.2em;font-weight:800' });
   const join = () => {
     const code = normalizeCode(codeInput.value);
-    if (!code) return toast('部屋コードを入れてね');
+    if (code.length !== 4) return toast('部屋番号（4桁の数字）を入れてね');
     if (takeName()) connect('join', code);
   };
-  const host = () => takeName() && connect('host', makeRoomCode());
+  const host = () => takeName() && connect('host', makeRoomCode(), true);
   codeInput.addEventListener('keydown', (e) => e.key === 'Enter' && !e.isComposing && join());
   const joinCard = h('div', { class: 'card' },
     h('h2', {}, '部屋に入る'),
@@ -1423,7 +1427,7 @@ function joinCards() {
   );
   return [
     title,
-    h('div', { class: 'card' }, h('h2', {}, 'ニックネーム'), nameInput),
+    h('div', { class: 'card' }, h('h2', {}, 'ニックネーム'), nameInput, h('p', { class: 'muted' }, '空のままなら自動で名前がつきます')),
     ...(urlCode ? [joinCard, hostCard] : [hostCard, joinCard]),
     rulesCard(),
   ];
@@ -1446,11 +1450,11 @@ function inviteCard() {
       prompt('このURLを送ってね', url);
     }
   };
-  const shareBtn = navigator.share && h('button', { class: 'sub small', onclick: () => navigator.share({ title: 'めっちゃカイトオン', text: `部屋コード ${roomCode} で遊ぼう！`, url }).catch(() => {}) }, '共有');
+  const shareBtn = navigator.share && h('button', { class: 'sub small', onclick: () => navigator.share({ title: 'めっちゃカイトオン', text: `部屋番号 ${roomCode} で遊ぼう！`, url }).catch(() => {}) }, '共有');
   return h('div', { class: 'card' },
     h('h2', {}, '友だちを呼ぼう'),
-    h('p', {}, '部屋コード：', h('span', { class: 'url', style: 'font-size:26px;letter-spacing:.12em' }, roomCode)),
-    h('p', { class: 'muted' }, 'このURLを送るか、部屋コードを入力してもらってね'),
+    h('p', {}, '部屋番号：', h('span', { class: 'url', style: 'font-size:30px;letter-spacing:.2em' }, roomCode)),
+    h('p', { class: 'muted' }, 'このURLを送るか、部屋番号を入力してもらってね。1人でも練習できます'),
     h('div', { class: 'url', style: 'font-size:14px' }, url),
     h('div', { class: 'row', style: 'margin-top:8px' },
       h('button', { class: 'sub small', onclick: copy }, 'URLをコピー'),
@@ -1502,12 +1506,18 @@ requestAnimationFrame(step);
   netMode = (await detectServer()) ? 'server' : 'p2p';
   const name = store.get('name');
   if (netMode === 'server') {
-    if (name && store.get('id')) connect();
+    if (store.get('id')) {
+      if (!name) store.set('name', defaultName());
+      connect();
+    }
   } else {
     // 再読み込みしたときは同じ部屋に戻る
     const code = sess.get('room');
     const urlCode = normalizeCode(new URLSearchParams(location.search).get('room'));
-    if (name && code && (!urlCode || urlCode === code)) connect(sess.get('hosting') ? 'host' : 'join', code);
+    if (code && (!urlCode || urlCode === code)) {
+      if (!name) store.set('name', defaultName());
+      connect(sess.get('hosting') ? 'host' : 'join', code);
+    }
   }
   renderPanel();
 })();

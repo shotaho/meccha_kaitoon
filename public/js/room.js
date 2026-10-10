@@ -8,7 +8,7 @@
 //   受信したら h.message(str) / 切断したら h.close()
 
 const MAX_PLAYERS = 16;
-const MIN_PLAYERS = 2;
+const MIN_PLAYERS = 1; // 1人なら練習モード（鬼なし）
 const TICK_MS = 66; // 位置の配信間隔（約15Hz）
 const SHOT_COOLDOWN_MS = 600;
 const MAX_OPS_PER_PLAYER = 20000;
@@ -80,6 +80,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
   let roundNo = 0;
   let foundLog = [];
   let roundResult = null;
+  let solo = false;
   const timers = [];
 
   const settings = {
@@ -151,7 +152,8 @@ export function createRoom({ getUrls = () => [] } = {}) {
   function startRound() {
     const list = online();
     if (list.length < MIN_PLAYERS) throw new Error(`${MIN_PLAYERS}人以上で遊べます`);
-    const nSeek = clamp(settings.seekers, 1, list.length - 1);
+    solo = list.length === 1;
+    const nSeek = solo ? 0 : clamp(settings.seekers, 1, list.length - 1);
 
     // 鬼をやった回数が少ない人を優先してランダムに選ぶ
     const order = list
@@ -189,6 +191,11 @@ export function createRoom({ getUrls = () => [] } = {}) {
     broadcastState();
   }
 
+  function finishPrep() {
+    if (solo) endRound('いろんな角度から、自分の擬態をチェックしてみよう！');
+    else startHunt();
+  }
+
   function startHunt() {
     phase = 'hunt';
     phaseEndsAt = Date.now() + settings.huntSec * 1000;
@@ -203,6 +210,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
   function endRound(reason) {
     phase = 'result';
     phaseEndsAt = 0;
+    if (solo) {
+      roundResult = { reason, survivors: [], winner: 'practice', solo: true };
+      return broadcastState();
+    }
     const survivors = [...players.values()].filter((p) => p.role === 'hider' && !p.found);
     for (const p of survivors) p.score += 3;
     roundResult = {
@@ -216,6 +227,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
   function checkEnd() {
     if (phase !== 'hunt' && phase !== 'prep') return;
     const hiders = [...players.values()].filter((p) => p.role === 'hider' && !p.found);
+    if (solo) {
+      if (!hiders.some((p) => p.conn)) endRound('練習を終了しました');
+      return;
+    }
     if (phase === 'hunt' && !hiders.length) return endRound('全員見つかった！');
     if (!online().some((p) => p.role === 'seeker')) return endRound('鬼がいなくなった…');
     if (!hiders.some((p) => p.conn) && phase === 'prep') return endRound('隠れる人がいなくなった…');
@@ -224,7 +239,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
   timers.push(
     setInterval(() => {
       if (!phaseEndsAt || Date.now() < phaseEndsAt) return;
-      if (phase === 'prep') startHunt();
+      if (phase === 'prep') finishPrep();
       else if (phase === 'hunt') endRound('時間切れ！逃げ切った！');
     }, 200),
   );
@@ -336,7 +351,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
         return;
       }
       case 'skip': {
-        if (isHost && phase === 'prep') startHunt();
+        if (isHost && phase === 'prep') finishPrep();
         return;
       }
       case 'abort': {
@@ -374,17 +389,13 @@ export function createRoom({ getUrls = () => [] } = {}) {
     const name = cleanText(msg.name, 12);
     let p = typeof msg.id === 'string' ? players.get(msg.id) : null;
     if (!p) {
-      if (!name) {
-        conn.send(JSON.stringify({ t: 'error', text: '名前を入力してください' }));
-        return null;
-      }
       if (players.size >= MAX_PLAYERS) {
         conn.send(JSON.stringify({ t: 'error', text: `満員です（最大${MAX_PLAYERS}人）` }));
         return null;
       }
       p = {
         id: makeId(),
-        name,
+        name: name || `プレイヤー${players.size + 1}`,
         score: 0,
         joinedAt: Date.now(),
         conn: null,
