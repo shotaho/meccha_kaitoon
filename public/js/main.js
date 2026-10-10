@@ -1,8 +1,9 @@
-// めっちゃカメレオン（LAN版） - クライアント
+// めっちゃカメレオン LAN - クライアント
 
 import * as THREE from 'three';
 import { buildWorld, collide, groundAt, ceilingAt, ROOM } from './world.js';
 import { Character, POSES, BODY_RADIUS } from './character.js';
+import { detectServer, connectServer, hostP2P, joinP2P, makeRoomCode, normalizeCode } from './net.js';
 
 // ===========================================================================
 // 小物
@@ -107,8 +108,20 @@ function splat(point, hit) {
 // 状態
 // ===========================================================================
 
-let ws = null;
-let myId = store.get('id');
+// 通信
+let netMode = null; // 'server'（Node.js の LAN サーバー） | 'p2p'（GitHub Pages など）
+let link = null;
+let roomCode = null;
+let hosting = false;
+let myId = null;
+
+// 再読み込みしても同じ部屋に戻れるよう、タブ単位で覚えておく
+const sess = {
+  get(k) { try { return sessionStorage.getItem('mc.' + k); } catch { return null; } },
+  set(k, v) { try { sessionStorage.setItem('mc.' + k, v); } catch {} },
+  del(k) { try { sessionStorage.removeItem('mc.' + k); } catch {} },
+};
+const idKey = () => (netMode === 'p2p' ? `id.${roomCode}` : 'id');
 let S = null; // サーバーから来た状態
 let stateAt = 0;
 let joined = false;
@@ -154,20 +167,61 @@ function remainSec() {
 // ===========================================================================
 
 function send(msg) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+  link?.send(msg);
 }
 
-function connect() {
-  const name = store.get('name');
-  if (!name) return renderPanel();
-  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => send({ t: 'join', id: myId, name });
-  ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
-  ws.onclose = () => {
-    if (!joined && !myId) return;
-    toast('接続が切れました。再接続中…');
-    setTimeout(connect, 1500);
-  };
+const callbacks = {
+  onOpen: () => send({ t: 'join', id: myId, name: store.get('name') }),
+  onMessage: (m) => onMessage(m),
+  onClose: () => toast('接続が切れました。再接続中…'),
+  onError: (text) => {
+    toast(text);
+    leaveRoom();
+  },
+  onStatus: (text) => toast(text),
+};
+
+function shareUrl(code) {
+  const q = new URLSearchParams({ room: code });
+  const ps = new URLSearchParams(location.search).get('peerserver');
+  if (ps) q.set('peerserver', ps);
+  return `${location.origin}${location.pathname}?${q}`;
+}
+
+// 接続を始める。p2p では mode = 'host' | 'join'
+function connect(mode, code) {
+  link?.close();
+  if (netMode === 'server') {
+    myId = store.get(idKey());
+    link = connectServer(callbacks);
+  } else {
+    roomCode = code;
+    hosting = mode === 'host';
+    myId = store.get(idKey());
+    sess.set('room', code);
+    sess.set('hosting', hosting ? '1' : '');
+    history.replaceState(null, '', shareUrl(code));
+    try {
+      link = hosting ? hostP2P(code, shareUrl(code), callbacks) : joinP2P(code, callbacks);
+    } catch (e) {
+      toast(e.message);
+      link = null;
+    }
+  }
+  renderPanel();
+}
+
+function leaveRoom() {
+  link?.close();
+  link = null;
+  joined = false;
+  S = null;
+  sess.del('room');
+  sess.del('hosting');
+  for (const c of chars.values()) c.dispose();
+  chars.clear();
+  renderPanel();
+  renderHud();
 }
 
 function onMessage(m) {
@@ -175,25 +229,19 @@ function onMessage(m) {
     case 'welcome':
       myId = m.id;
       joined = true;
-      store.set('id', myId);
+      store.set(idKey(), myId);
       break;
     case 'error':
       toast(m.text);
-      store.del('id');
+      store.del(idKey());
       myId = null;
-      joined = false;
-      ws.onclose = null;
-      ws.close();
-      renderPanel();
+      leaveRoom();
       break;
     case 'kicked':
       toast('ホストに外されました');
-      store.del('id');
+      store.del(idKey());
       myId = null;
-      joined = false;
-      ws.onclose = null;
-      S = null;
-      renderPanel();
+      leaveRoom();
       break;
     case 'state': {
       const prevPhase = S?.phase;
@@ -1282,34 +1330,18 @@ function settingsCard() {
 function renderPanel() {
   const el = $('panel');
   const out = [];
-  if (!joined) {
-    const input = h('input', { type: 'text', placeholder: 'ニックネーム（12文字まで）', maxlength: 12, value: store.get('name') || '' });
-    const go = () => {
-      const name = input.value.trim();
-      if (!name) return toast('名前を入れてね');
-      store.set('name', name);
-      beep(660, 0.08);
-      connect();
-    };
-    input.addEventListener('keydown', (e) => e.key === 'Enter' && !e.isComposing && go());
-    out.push(
-      h('div', { class: 'card title' },
-        h('div', { class: 'logo' }, '🦎'),
-        h('h1', {}, 'めっちゃカメレオン LAN'),
-        h('p', { class: 'muted' }, '体に絵を描いて背景に溶け込む、お絵かきかくれんぼ。同じWiFiのPC・スマホで対戦！'),
-      ),
-      h('div', { class: 'card' }, h('h2', {}, '参加する'), h('div', { class: 'row' }, input, h('button', { onclick: go }, 'はじめる'))),
-      rulesCard(),
-    );
-  } else if (!S) {
-    out.push(h('div', { class: 'card' }, '接続中…'));
+  if (!netMode) {
+    out.push(h('div', { class: 'card' }, '読み込み中…'));
+  } else if (!link) {
+    out.push(...joinCards());
+  } else if (!joined || !S) {
+    out.push(h('div', { class: 'card' },
+      h('p', {}, netMode === 'p2p' ? (hosting ? `部屋「${roomCode}」を準備しています…` : `部屋「${roomCode}」に接続しています…`) : '接続中…'),
+      netMode === 'p2p' && h('button', { class: 'sub small', onclick: leaveRoom }, 'やめる'),
+    ));
   } else if (S.phase === 'lobby') {
     out.push(
-      h('div', { class: 'card' },
-        h('h2', {}, '友だちを呼ぼう'),
-        h('p', { class: 'muted' }, '同じWiFiにつないで、ブラウザでこのアドレスを開いてね'),
-        (S.urls.length ? S.urls : [location.origin]).map((u) => h('div', { class: 'url' }, u)),
-      ),
+      inviteCard(),
       h('div', { class: 'card' }, h('h2', {}, `プレイヤー（${S.players.filter((p) => p.online).length}人）`), playerList({ kick: true }), nameRow()),
       settingsCard(),
       rulesCard(),
@@ -1349,8 +1381,91 @@ function renderPanel() {
   renderMenuButton();
 }
 
+function joinCards() {
+  const nameInput = h('input', { type: 'text', placeholder: 'ニックネーム（12文字まで）', maxlength: 12, value: store.get('name') || '' });
+  const takeName = () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      toast('名前を入れてね');
+      return false;
+    }
+    store.set('name', name);
+    beep(660, 0.08);
+    return true;
+  };
+  const title = h('div', { class: 'card title' },
+    h('div', { class: 'logo' }, '🦎'),
+    h('h1', {}, 'めっちゃカメレオン LAN'),
+    h('p', { class: 'muted' }, '体に絵を描いて背景に溶け込む、お絵かきかくれんぼ。PC・スマホのブラウザで対戦！'),
+  );
+  if (netMode === 'server') {
+    const go = () => takeName() && connect();
+    nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && !e.isComposing && go());
+    return [title, h('div', { class: 'card' }, h('h2', {}, '参加する'), h('div', { class: 'row' }, nameInput, h('button', { onclick: go }, 'はじめる'))), rulesCard()];
+  }
+  const urlCode = normalizeCode(new URLSearchParams(location.search).get('room'));
+  const codeInput = h('input', { type: 'text', placeholder: '部屋コード（例：K7QX2）', maxlength: 8, value: urlCode, style: 'text-transform:uppercase' });
+  const join = () => {
+    const code = normalizeCode(codeInput.value);
+    if (!code) return toast('部屋コードを入れてね');
+    if (takeName()) connect('join', code);
+  };
+  const host = () => takeName() && connect('host', makeRoomCode());
+  codeInput.addEventListener('keydown', (e) => e.key === 'Enter' && !e.isComposing && join());
+  const joinCard = h('div', { class: 'card' },
+    h('h2', {}, '部屋に入る'),
+    h('div', { class: 'row' }, codeInput, h('button', { onclick: join }, '入る')),
+  );
+  const hostCard = h('div', { class: 'card' },
+    h('h2', {}, '部屋を作る'),
+    h('p', { class: 'muted' }, 'あなたがホストになります。できればPCで作ってね（ホストの画面を閉じると部屋がなくなります）'),
+    h('button', { class: urlCode ? 'sub' : '', style: 'width:100%', onclick: host }, '新しい部屋を作る'),
+  );
+  return [
+    title,
+    h('div', { class: 'card' }, h('h2', {}, 'ニックネーム'), nameInput),
+    ...(urlCode ? [joinCard, hostCard] : [hostCard, joinCard]),
+    rulesCard(),
+  ];
+}
+
+function inviteCard() {
+  if (netMode !== 'p2p') {
+    return h('div', { class: 'card' },
+      h('h2', {}, '友だちを呼ぼう'),
+      h('p', { class: 'muted' }, '同じWiFiにつないで、ブラウザでこのアドレスを開いてね'),
+      (S.urls.length ? S.urls : [location.origin]).map((u) => h('div', { class: 'url' }, u)),
+    );
+  }
+  const url = S.urls[0] || shareUrl(roomCode);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('URLをコピーしました');
+    } catch {
+      prompt('このURLを送ってね', url);
+    }
+  };
+  const shareBtn = navigator.share && h('button', { class: 'sub small', onclick: () => navigator.share({ title: 'めっちゃカメレオン LAN', text: `部屋コード ${roomCode} で遊ぼう！`, url }).catch(() => {}) }, '共有');
+  return h('div', { class: 'card' },
+    h('h2', {}, '友だちを呼ぼう'),
+    h('p', {}, '部屋コード：', h('span', { class: 'url', style: 'font-size:26px;letter-spacing:.12em' }, roomCode)),
+    h('p', { class: 'muted' }, 'このURLを送るか、部屋コードを入力してもらってね'),
+    h('div', { class: 'url', style: 'font-size:14px' }, url),
+    h('div', { class: 'row', style: 'margin-top:8px' },
+      h('button', { class: 'sub small', onclick: copy }, 'URLをコピー'),
+      shareBtn,
+    ),
+    hosting && h('p', { class: 'muted' }, '⚠ あなたがホストです。この画面を閉じたり、別のタブ・アプリに切り替えたままにしないでね'),
+  );
+}
+
 function nameRow() {
   return h('div', { class: 'row', style: 'margin-top:10px' },
+    netMode === 'p2p' && h('button', {
+      class: 'small sub',
+      onclick: () => confirm(hosting ? '部屋を閉じますか？（全員の接続が切れます）' : '部屋を出ますか？') && leaveRoom(),
+    }, hosting ? '部屋を閉じる' : '部屋を出る'),
     h('button', {
       class: 'small sub',
       onclick: () => {
@@ -1381,8 +1496,21 @@ function renderMenuButton() {
 // ===========================================================================
 
 renderPanel();
-if (store.get('name') && myId) connect();
 requestAnimationFrame(step);
+
+(async () => {
+  netMode = (await detectServer()) ? 'server' : 'p2p';
+  const name = store.get('name');
+  if (netMode === 'server') {
+    if (name && store.get('id')) connect();
+  } else {
+    // 再読み込みしたときは同じ部屋に戻る
+    const code = sess.get('room');
+    const urlCode = normalizeCode(new URLSearchParams(location.search).get('room'));
+    if (name && code && (!urlCode || urlCode === code)) connect(sess.get('hosting') ? 'host' : 'join', code);
+  }
+  renderPanel();
+})();
 
 // テスト・デバッグ用
 window.__mc = { get S() { return S; }, self, chars, orbit, free, setTool, setHiderMode, shoot, get viewMode() { return viewMode; } };

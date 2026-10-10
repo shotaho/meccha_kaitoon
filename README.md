@@ -1,16 +1,37 @@
 # 🦎 めっちゃカメレオン LAN
 
 真っ白な体に絵を描いて背景に溶け込む「お絵かきかくれんぼ」を、
-**同じWiFi（LAN）内のPC・スマホのブラウザ**で対戦できるようにしたものです。
+**PC・スマホのブラウザ**で対戦できるようにしたものです。
 （『めっちゃカメレオン』の遊び方を参考にした非公式のファン制作です）
 
-## 起動
+## 遊ぶ方法は2つ
+
+### A. GitHub Pages 版（インストール不要・おすすめ）
+
+**https://shotaho.github.io/meccha_kaitoon/** を開くだけ。
+
+1. ホストが「新しい部屋を作る」→ 部屋コードと招待URLが出る
+2. 友だちは招待URLを開くか、部屋コードを入力して「入る」
+3. ホストがルールを決めて「ゲーム開始！」
+
+- ホストのブラウザがゲームの進行役になり、他の人は WebRTC（P2P）でホストに直接つながります。
+  つなぐときだけ PeerJS の無料シグナリングサーバーを使うので、インターネット接続が必要です。
+  同じWiFiでなくても遊べます（回線によってはつながらないことがあります）。
+- **ホストは画面を閉じたり、別のタブ・アプリに切り替えたままにしないでください**（部屋がなくなる／動きが止まる）。
+  できればPCでホストしてください。
+- 自前の PeerJS サーバーを使う場合は `?peerserver=https://example.com:9000/` をURLに付けます。
+
+#### デプロイ
+`.github/workflows/pages.yml` が `public/` を GitHub Pages に公開します（push で自動実行）。
+初回だけ、リポジトリの **Settings → Pages → Build and deployment → Source** を **「GitHub Actions」** にしてください。
+
+### B. LAN サーバー版（インターネットなしでも遊べる）
 
 ```sh
 npm start        # または node server.js
 ```
 
-- 必要なのは Node.js 18 以上だけ（npm install 不要。three.js は `public/vendor` に同梱）
+- 必要なのは Node.js 18 以上だけ（npm install 不要。three.js・PeerJS は `public/vendor` に同梱）
 - 起動するとターミナルに `http://192.168.x.x:3000` のようなアドレスが出るので、
   同じWiFiにつないだ端末のブラウザでそのアドレスを開けば参加できます（2〜16人）
 - ポートを変える場合は `PORT=8080 npm start`
@@ -56,7 +77,9 @@ npm start        # または node server.js
 
 ## 構成
 
-- `server.js` … HTTP + WebSocket サーバー（依存なしの自前実装）。部屋・フェーズ・判定・ペイント履歴を管理
+- `public/js/room.js` … 部屋のゲーム進行（フェーズ・判定・ペイント履歴）。LAN サーバーでもホストのブラウザでも同じコードが動く
+- `public/js/net.js` … 通信（LAN版は WebSocket、GitHub Pages 版は PeerJS による WebRTC）
+- `server.js` … LAN 版の HTTP + WebSocket サーバー（依存なしの自前実装）
 - `public/js/world.js` … ステージ（家具・当たり判定）
 - `public/js/textures.js` … ステージの模様を Canvas で生成（全員同じになるようシード固定）
 - `public/js/character.js` … キャラクター、ポーズ、体へのペイント（各パーツの Canvas テクスチャに直接描画）
