@@ -1,0 +1,13 @@
+{
+  "name": "meccha-chameleon",
+  "version": "1.0.0",
+  "description": "同じWiFi内で遊べる「カメレオン」風の正体隠し連想ワードゲーム",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
