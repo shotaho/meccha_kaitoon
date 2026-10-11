@@ -11,7 +11,7 @@ import { MAPS, groundY } from './maps.js';
 
 const MAX_PLAYERS = 16; // 人間の最大人数（CPU は別）
 const MAX_CPUS = 7;
-const MIN_PLAYERS = 1; // 1人なら練習モード（鬼なし）
+const MIN_PLAYERS = 2; // 人間が1人だけなら CPU を自動で入れる
 const TICK_MS = 66; // 位置の配信間隔（約15Hz）
 const SHOT_COOLDOWN_MS = 600;
 const MAX_OPS_PER_PLAYER = 20000;
@@ -84,7 +84,6 @@ export function createRoom({ getUrls = () => [] } = {}) {
   let roundNo = 0;
   let foundLog = [];
   let roundResult = null;
-  let solo = false;
   const timers = [];
 
   const settings = {
@@ -204,18 +203,33 @@ export function createRoom({ getUrls = () => [] } = {}) {
 
   // ----- ラウンド進行 -----
 
-  function startRound() {
+  // role: 人間が1人（CPU 戦）のとき、その人が選んだ役 'seeker' | 'hider'
+  function startRound(role) {
+    // 1人だけなら CPU と対戦する
+    if (online().length < MIN_PLAYERS && !settings.cpus) {
+      settings.cpus = 3;
+      syncCpus();
+    }
     const list = online();
     if (list.length < MIN_PLAYERS) throw new Error(`${MIN_PLAYERS}にんいじょうであそべます`);
-    solo = list.length === 1;
-    const nSeek = solo ? 0 : clamp(settings.seekers, 1, list.length - 1);
+    const nSeek = clamp(settings.seekers, 1, list.length - 1);
 
-    // 鬼をやった回数が少ない人を優先してランダムに選ぶ
-    const order = list
-      .map((p) => ({ p, k: p.seekerCount + Math.random() * 0.9 }))
-      .sort((a, b) => a.k - b.k)
-      .map((x) => x.p);
-    const seekers = new Set(order.slice(0, nSeek).map((p) => p.id));
+    let seekers;
+    const people = list.filter((p) => !p.cpu);
+    const cpus = list.filter((p) => p.cpu).sort(() => Math.random() - 0.5);
+    if (people.length === 1 && cpus.length && (role === 'seeker' || role === 'hider')) {
+      // CPU 戦：えらんだ役にする
+      seekers = role === 'seeker'
+        ? new Set([people[0].id])
+        : new Set(cpus.slice(0, clamp(settings.seekers, 1, cpus.length)).map((p) => p.id));
+    } else {
+      // 鬼をやった回数が少ない人を優先してランダムに選ぶ
+      const order = list
+        .map((p) => ({ p, k: p.seekerCount + Math.random() * 0.9 }))
+        .sort((a, b) => a.k - b.k)
+        .map((x) => x.p);
+      seekers = new Set(order.slice(0, nSeek).map((p) => p.id));
+    }
 
     roundNo++;
     foundLog = [];
@@ -255,15 +269,14 @@ export function createRoom({ getUrls = () => [] } = {}) {
     phaseEndsAt = Date.now() + settings.prepSec * 1000;
     // 隠れる側が CPU だけなら、準備を待たずにすぐ始める
     const humanHider = [...players.values()].some((p) => p.role === 'hider' && !p.cpu);
-    if (!solo && !humanHider) phaseEndsAt = Date.now() + 3000;
+    if (!humanHider) phaseEndsAt = Date.now() + 3000;
     broadcast({ t: 'round', roundNo });
     broadcast(transformsMsg(true));
     broadcastState();
   }
 
   function finishPrep() {
-    if (solo) endRound('いろんなかくどから、じぶんのぎたいをチェックしてみよう！');
-    else startHunt();
+    startHunt();
   }
 
   function startHunt() {
@@ -280,10 +293,6 @@ export function createRoom({ getUrls = () => [] } = {}) {
   function endRound(reason) {
     phase = 'result';
     phaseEndsAt = 0;
-    if (solo) {
-      roundResult = { reason, survivors: [], winner: 'practice', solo: true };
-      return broadcastState();
-    }
     const survivors = [...players.values()].filter((p) => p.role === 'hider' && !p.found);
     for (const p of survivors) p.score += 3;
     roundResult = {
@@ -297,10 +306,6 @@ export function createRoom({ getUrls = () => [] } = {}) {
   function checkEnd() {
     if (phase !== 'hunt' && phase !== 'prep') return;
     const hiders = [...players.values()].filter((p) => p.role === 'hider' && !p.found);
-    if (solo) {
-      if (!hiders.some((p) => p.conn || p.cpu)) endRound('れんしゅうをしゅうりょうしました');
-      return;
-    }
     if (phase === 'hunt' && !hiders.length) return endRound('ぜんいんみつかった！');
     if (!online().some((p) => p.role === 'seeker')) return endRound('おにがいなくなった…');
     if (!hiders.some((p) => p.conn || p.cpu) && phase === 'prep') return endRound('かくれるひとがいなくなった…');
@@ -423,7 +428,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
         if (!isHost) return send(p, { t: 'toast', text: 'ホストだけがスタートできます' });
         if (phase !== 'lobby' && phase !== 'result') return;
         try {
-          startRound();
+          startRound(msg.role);
         } catch (e) {
           send(p, { t: 'toast', text: e.message });
         }

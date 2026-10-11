@@ -295,8 +295,8 @@ function onMessage(m) {
         store.set('cpu.map', S.settings.map);
         if (quickStart && S.phase === 'lobby') {
           quickStart = false;
+          // 前回の設定にして、「おに／かくれる」をえらぶ画面へ
           send({ t: 'settings', settings: { cpus: Number(store.get('cpu.cpus')) || 3, cpuLevel: store.get('cpu.level') || 'normal', map: store.get('cpu.map') || 'house' } });
-          send({ t: 'start' });
         }
       }
       if (prevPhase !== S.phase) onPhaseChange(prevPhase);
@@ -1194,7 +1194,7 @@ function updateVisibility() {
         if (info.found) {
           outline = '#ff3b6b';
           label = id !== myId;
-        } else if (phase === 'result' && !S.result?.solo) {
+        } else if (phase === 'result') {
           outline = Math.sin(t * 6) > -0.3 ? '#ffd400' : null;
           label = true;
         } else if (id !== myId && myRole !== 'seeker') {
@@ -1410,6 +1410,24 @@ function rulesCard() {
   );
 }
 
+// 人間が自分ひとり＝CPU 戦。ラウンドごとに「おに／かくれる」をえらべる
+function isCpuMatch() {
+  return isHost() && S.players.filter((p) => p.online && !p.cpu).length === 1;
+}
+
+function roleChoiceCard() {
+  if (!isCpuMatch()) return null;
+  const big = 'flex:1;font-size:18px;padding:16px 8px';
+  return h('div', { class: 'card' },
+    h('h2', {}, S.phase === 'result' ? 'つぎはどっちであそぶ？' : 'どっちであそぶ？'),
+    h('div', { class: 'row' },
+      h('button', { class: 'danger', style: big, onclick: () => send({ t: 'start', role: 'seeker' }) }, '👹 おにになる'),
+      h('button', { style: big, onclick: () => send({ t: 'start', role: 'hider' }) }, '🦎 かくれる'),
+    ),
+    h('p', { class: 'muted' }, S.settings.cpus ? `CPU ${S.settings.cpus}にんとたいせん（したのせっていでかえられます）` : 'CPU 3にんとたいせんします'),
+  );
+}
+
 function settingsCard() {
   const st = S.settings;
   const editable = isHost();
@@ -1434,10 +1452,9 @@ function settingsCard() {
       h('label', {}, 'さがすタイム'), sel('huntSec', [30, 60, 90, 120, 150, 180, 240], (o) => `${o}びょう`),
       h('label', {}, 'はずれペナルティ'), sel('penaltySec', [0, 2, 3, 5, 10], (o) => (o ? `-${o}びょう` : 'なし')),
     ),
-    editable
-      ? h('button', { style: 'width:100%', disabled: n < 1, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? 'つぎのラウンドへ！' : 'ゲームスタート！')
-      : h('p', { class: 'muted' }, 'ホストのスタートをまっています…'),
-    editable && n === 1 && !st.cpus && h('p', { class: 'muted' }, 'ひとりなられんしゅうモード：かくれて、じぶんのぎたいをいろんなかくどからじっくりみられます。CPUをいれるとたいせんできます'),
+    !editable && h('p', { class: 'muted' }, 'ホストのスタートをまっています…'),
+    editable && !isCpuMatch() && h('button', { style: 'width:100%', disabled: n < 1, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? 'つぎのラウンドへ！' : 'ゲームスタート！'),
+    editable && isCpuMatch() && h('p', { class: 'muted' }, 'うえの「おにになる」「かくれる」でスタートします'),
   );
 }
 
@@ -1455,6 +1472,7 @@ function renderPanel() {
     ));
   } else if (S.phase === 'lobby') {
     out.push(
+      roleChoiceCard(),
       inviteCard(),
       h('div', { class: 'card' }, h('h2', {}, `プレイヤー（${S.players.filter((p) => p.online).length}にん）`), playerList({ kick: true }), nameRow()),
       settingsCard(),
@@ -1464,9 +1482,7 @@ function renderPanel() {
     const r = S.result || {};
     out.push(
       h('div', { class: 'card' },
-        r.solo
-          ? h('div', { class: 'banner h' }, '🎨 れんしゅうおしまい！')
-          : h('div', { class: `banner ${r.winner === 'hiders' ? 'h' : 's'}` }, r.winner === 'hiders' ? '🦎 かくれるがわのかち！' : '👹 おにのかち！'),
+        h('div', { class: `banner ${r.winner === 'hiders' ? 'h' : 's'}` }, r.winner === 'hiders' ? '🦎 かくれるがわのかち！' : '👹 おにのかち！'),
         h('p', { style: 'text-align:center' }, r.reason),
         (r.survivors || []).length > 0 && h('p', {}, 'にげきり：', r.survivors.map(nameOf).join('、'), '（+3てん）'),
         S.foundLog.length > 0 && h('div', {},
@@ -1475,6 +1491,7 @@ function renderPanel() {
         ),
         h('button', { class: 'sub', style: 'width:100%;margin-top:8px', onclick: () => { resultPanelHidden = true; renderPanel(); } }, '👀 こたえあわせ（ステージをみてまわる）'),
       ),
+      roleChoiceCard(),
       h('div', { class: 'card' }, h('h2', {}, 'とくてん'), playerList({ byScore: true, kick: true }), nameRow()),
       settingsCard(),
       isHost() && h('div', { class: 'card' }, h('button', { class: 'sub', onclick: () => send({ t: 'abort' }) }, 'ロビーにもどる'), ' ',
@@ -1549,7 +1566,7 @@ function inviteCard() {
   if (offline) {
     return h('div', { class: 'card' },
       h('h2', {}, '🤖 CPUとたいせんちゅう'),
-      h('p', { class: 'muted' }, 'したのせっていでステージやCPUのにんずう・つよさをかえて、「ゲームスタート！」をおしてね。ともだちとあそぶときは「CPUせんをやめる」からへやをつくってね'),
+      h('p', { class: 'muted' }, '「おにになる」か「かくれる」をえらぶと、すぐはじまるよ。ステージやCPUのにんずう・つよさは、したのせっていでかえられます。ともだちとあそぶときは「CPUせんをやめる」からへやをつくってね'),
     );
   }
   if (netMode !== 'p2p') {
@@ -1572,7 +1589,7 @@ function inviteCard() {
   return h('div', { class: 'card' },
     h('h2', {}, 'ともだちをよぼう'),
     h('p', {}, 'へやばんごう：', h('span', { class: 'url', style: 'font-size:30px;letter-spacing:.2em' }, roomCode)),
-    h('p', { class: 'muted' }, 'このURLをおくるか、へやばんごうをにゅうりょくしてもらってね。ひとりでもれんしゅうできます'),
+    h('p', { class: 'muted' }, 'このURLをおくるか、へやばんごうをにゅうりょくしてもらってね。ひとりでもCPUとあそべます'),
     h('div', { class: 'url', style: 'font-size:14px' }, url),
     h('div', { class: 'row', style: 'margin-top:8px' },
       h('button', { class: 'sub small', onclick: copy }, 'URLをコピー'),
