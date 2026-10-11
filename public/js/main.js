@@ -1358,15 +1358,25 @@ function renderTools() {
   const collapsed = el.classList.contains('collapsed');
   const sel = (cond) => (cond ? 'on' : 'sub');
   const parts = [];
+  // スマホ：ひらく／たたむの取っ手は、たたんでいても見えるようにいちばん上に置く
+  const setCollapsed = (v) => {
+    el.classList.toggle('collapsed', v);
+    renderTools();
+    renderTouch();
+  };
+  if (isTouch) {
+    parts.push(h('button', { class: 'sub small toolHandle', onclick: () => setCollapsed(!collapsed) }, collapsed ? '▲ ツールをひらく' : '▼ ツールをたたむ'));
+  }
+  const pickMode = (m) => {
+    if (collapsed) el.classList.remove('collapsed');
+    setHiderMode(m);
+  };
   parts.push(
     h('div', { class: 'grid2' },
-      h('button', { class: sel(hiderMode === 'move'), onclick: () => setHiderMode('move') }, frozen ? '👀 みまわす' : '🚶 いどう・ポーズ'),
-      h('button', { class: sel(hiderMode === 'paint'), onclick: () => setHiderMode('paint') }, '🎨 ペイント'),
+      h('button', { class: sel(hiderMode === 'move'), onclick: () => pickMode('move') }, frozen ? '👀 みまわす' : '🚶 いどう・ポーズ'),
+      h('button', { class: sel(hiderMode === 'paint'), onclick: () => pickMode('paint') }, '🎨 ペイント'),
     ),
   );
-  if (isTouch) {
-    parts.push(h('button', { class: 'sub small', onclick: () => { el.classList.toggle('collapsed'); renderTools(); renderTouch(); } }, collapsed ? '▲ ツールをひらく' : '▼ ツールをたたむ'));
-  }
   if (hiderMode === 'move' && frozen) {
     parts.push(h('p', { class: 'muted' }, 'もううごけないけど、みつかるまではペイントでいろをぬりなおせるよ。おにのうごきをみながらなおそう！'));
   } else if (hiderMode === 'move') {

@@ -208,13 +208,17 @@ details summary { cursor: pointer; font-weight: 800; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%); }
 
-#touch.withTools #stick, #touch.withTools #touchBtns { bottom: calc(34vh + 16px); }
-#touch.withTools.toolsCollapsed #stick, #touch.withTools.toolsCollapsed #touchBtns { bottom: 76px; }
+#touch.withTools #stick, #touch.withTools #touchBtns { bottom: calc(34vh + 16px); bottom: calc(34dvh + 16px); }
+#touch.withTools.toolsCollapsed #stick, #touch.withTools.toolsCollapsed #touchBtns { bottom: calc(118px + env(safe-area-inset-bottom)); }
+#tools .toolHandle { width: 100%; padding: 6px; flex: none; }
 
 @media (max-width: 700px) {
-  #tools { top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 34vh; border-radius: 14px 14px 0 0; }
+  #tools {
+    top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 34vh; max-height: 34dvh;
+    border-radius: 14px 14px 0 0; padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
   #menuBtn { top: 50px !important; }
-  #tools.collapsed { max-height: 56px; overflow: hidden; }
+  #tools.collapsed { max-height: calc(100px + env(safe-area-inset-bottom)); overflow: hidden; }
   #hint { display: none !important; }
   #hud { top: 6px; padding: 4px 10px; gap: 6px; }
   #timer { font-size: 18px; }
