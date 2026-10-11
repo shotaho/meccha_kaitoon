@@ -206,7 +206,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
 
   function startRound() {
     const list = online();
-    if (list.length < MIN_PLAYERS) throw new Error(`${MIN_PLAYERS}人以上で遊べます`);
+    if (list.length < MIN_PLAYERS) throw new Error(`${MIN_PLAYERS}にんいじょうであそべます`);
     solo = list.length === 1;
     const nSeek = solo ? 0 : clamp(settings.seekers, 1, list.length - 1);
 
@@ -262,7 +262,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
   }
 
   function finishPrep() {
-    if (solo) endRound('いろんな角度から、自分の擬態をチェックしてみよう！');
+    if (solo) endRound('いろんなかくどから、じぶんのぎたいをチェックしてみよう！');
     else startHunt();
   }
 
@@ -273,7 +273,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
       if (p.role === 'seeker') p.tf = seekerTf();
     }
     broadcast(transformsMsg(true));
-    systemMsg('鬼が動き出した！');
+    systemMsg('おにがうごきだした！');
     broadcastState();
   }
 
@@ -298,19 +298,19 @@ export function createRoom({ getUrls = () => [] } = {}) {
     if (phase !== 'hunt' && phase !== 'prep') return;
     const hiders = [...players.values()].filter((p) => p.role === 'hider' && !p.found);
     if (solo) {
-      if (!hiders.some((p) => p.conn || p.cpu)) endRound('練習を終了しました');
+      if (!hiders.some((p) => p.conn || p.cpu)) endRound('れんしゅうをしゅうりょうしました');
       return;
     }
-    if (phase === 'hunt' && !hiders.length) return endRound('全員見つかった！');
-    if (!online().some((p) => p.role === 'seeker')) return endRound('鬼がいなくなった…');
-    if (!hiders.some((p) => p.conn || p.cpu) && phase === 'prep') return endRound('隠れる人がいなくなった…');
+    if (phase === 'hunt' && !hiders.length) return endRound('ぜんいんみつかった！');
+    if (!online().some((p) => p.role === 'seeker')) return endRound('おにがいなくなった…');
+    if (!hiders.some((p) => p.conn || p.cpu) && phase === 'prep') return endRound('かくれるひとがいなくなった…');
   }
 
   timers.push(
     setInterval(() => {
       if (!phaseEndsAt || Date.now() < phaseEndsAt) return;
       if (phase === 'prep') finishPrep();
-      else if (phase === 'hunt') endRound('時間切れ！逃げ切った！');
+      else if (phase === 'hunt') endRound('じかんぎれ！にげきった！');
     }, 200),
   );
 
@@ -333,6 +333,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
 
   // ----- メッセージ処理 -----
 
+  function canPaint(p) {
+    return p.role === 'hider' && !p.found && (phase === 'prep' || phase === 'hunt');
+  }
+
   function handle(p, msg) {
     const isHost = p.id === hostId;
     switch (msg.t) {
@@ -348,11 +352,12 @@ export function createRoom({ getUrls = () => [] } = {}) {
         return;
       }
       case 'paint': {
-        if (p.role !== 'hider' || phase !== 'prep' || !Array.isArray(msg.ops)) return;
+        // 見つかるまでは捜索中もぬれる
+        if (!canPaint(p) || !Array.isArray(msg.ops)) return;
         const ops = msg.ops.slice(0, 200).map(sanitizeOp).filter(Boolean);
         if (!ops.length) return;
         if (p.ops.length + ops.length > MAX_OPS_PER_PLAYER) {
-          send(p, { t: 'toast', text: 'これ以上塗れません（「全消し」で整理してね）' });
+          send(p, { t: 'toast', text: 'これいじょうぬれません（「ぜんぶけす」でせいりしてね）' });
           return;
         }
         p.ops.push(...ops);
@@ -360,7 +365,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
         return;
       }
       case 'undo': {
-        if (p.role !== 'hider' || phase !== 'prep' || !p.ops.length) return;
+        if (!canPaint(p) || !p.ops.length) return;
         const g = p.ops[p.ops.length - 1].g;
         while (p.ops.length && p.ops[p.ops.length - 1].g === g) p.ops.pop();
         broadcast({ t: 'paintReset', id: p.id, ops: p.ops }, p.id);
@@ -379,11 +384,11 @@ export function createRoom({ getUrls = () => [] } = {}) {
           p.score += 1;
           foundLog.push({ id: target.id, by: p.id, at: settings.huntSec * 1000 - (phaseEndsAt - now) });
           broadcast({ t: 'shot', from: p.id, point, hit: target.id });
-          systemMsg(`${p.name} が ${target.name} を見つけた！`);
+          systemMsg(`${p.name} が ${target.name} をみつけた！`);
           if (settings.mode === 'infect') {
             target.role = 'seeker';
             target.tf.pose = 'stand';
-            systemMsg(`${target.name} が鬼になった！`);
+            systemMsg(`${target.name} がおにになった！`);
           }
           broadcastState();
           checkEnd();
@@ -415,7 +420,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
         return;
       }
       case 'start': {
-        if (!isHost) return send(p, { t: 'toast', text: 'ホストだけが開始できます' });
+        if (!isHost) return send(p, { t: 'toast', text: 'ホストだけがスタートできます' });
         if (phase !== 'lobby' && phase !== 'result') return;
         try {
           startRound();
@@ -476,7 +481,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
     let p = typeof msg.id === 'string' ? players.get(msg.id) : null;
     if (!p || p.cpu) {
       if (humans().length >= MAX_PLAYERS) {
-        conn.send(JSON.stringify({ t: 'error', text: `満員です（最大${MAX_PLAYERS}人）` }));
+        conn.send(JSON.stringify({ t: 'error', text: `まんいんです（さいだい${MAX_PLAYERS}にん）` }));
         return null;
       }
       p = newPlayer(name || `プレイヤー${humans().length + 1}`);

@@ -272,7 +272,7 @@ export const MAPS = {
   },
 
   blocks: {
-    name: 'ブロックの世界',
+    name: 'ブロックのせかい',
     outdoor: true,
     bounds: { x0: -16, x1: 16, z0: -12, z1: 12, h: 14 },
     seekerSpawn: [12, null, 9],

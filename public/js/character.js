@@ -20,13 +20,13 @@ const HIP_Y = 0.65;
 
 // ポーズ： root=[y, z, rx, rz], torso, head, 手足=[rx, rz]
 export const POSES = {
-  stand: { label: '立つ', root: [0, 0, 0, 0], torso: 0, head: 0, armL: [0, 0.12], armR: [0, -0.12], legL: [0, 0], legR: [0, 0] },
+  stand: { label: 'たつ', root: [0, 0, 0, 0], torso: 0, head: 0, armL: [0, 0.12], armR: [0, -0.12], legL: [0, 0], legR: [0, 0] },
   crouch: { label: 'しゃがむ', root: [-0.43, 0, 0, 0], torso: 0.15, head: 0, armL: [-0.9, 0.15], armR: [-0.9, -0.15], legL: [-1.45, 0.08], legR: [-1.45, -0.08] },
-  curl: { label: '丸まる', root: [-0.4, -0.15, 0, 0], torso: 1.15, head: 0.45, armL: [-1.7, 0.25], armR: [-1.7, -0.25], legL: [-1.9, 0.05], legR: [-1.9, -0.05] },
-  lie: { label: '寝そべる', root: [0.26, -0.85, Math.PI / 2, 0], torso: 0, head: -0.3, armL: [-Math.PI + 0.15, 0.2], armR: [-Math.PI + 0.15, -0.2], legL: [0, 0.08], legR: [0, -0.08] },
+  curl: { label: 'まるまる', root: [-0.4, -0.15, 0, 0], torso: 1.15, head: 0.45, armL: [-1.7, 0.25], armR: [-1.7, -0.25], legL: [-1.9, 0.05], legR: [-1.9, -0.05] },
+  lie: { label: 'ねそべる', root: [0.26, -0.85, Math.PI / 2, 0], torso: 0, head: -0.3, armL: [-Math.PI + 0.15, 0.2], armR: [-Math.PI + 0.15, -0.2], legL: [0, 0.08], legR: [0, -0.08] },
   banzai: { label: 'バンザイ', root: [0, 0, 0, 0], torso: 0, head: 0, armL: [0, Math.PI - 0.25], armR: [0, -Math.PI + 0.25], legL: [0, 0], legR: [0, 0] },
-  star: { label: '大の字', root: [0, 0, 0, 0], torso: 0, head: 0, armL: [0, 1.35], armR: [0, -1.35], legL: [0, 0.35], legR: [0, -0.35] },
-  flip: { label: '逆立ち', root: [1.78, 0, 0, Math.PI], torso: 0, head: 0, armL: [0, Math.PI - 0.15], armR: [0, -Math.PI + 0.15], legL: [0, 0.2], legR: [0, -0.2] },
+  star: { label: 'だいのじ', root: [0, 0, 0, 0], torso: 0, head: 0, armL: [0, 1.35], armR: [0, -1.35], legL: [0, 0.35], legR: [0, -0.35] },
+  flip: { label: 'さかだち', root: [1.78, 0, 0, Math.PI], torso: 0, head: 0, armL: [0, Math.PI - 0.15], armR: [0, -Math.PI + 0.15], legL: [0, 0.2], legR: [0, -0.2] },
 };
 
 function partGeometry(p) {

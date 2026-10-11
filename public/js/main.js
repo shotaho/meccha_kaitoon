@@ -194,7 +194,7 @@ function send(msg) {
 const callbacks = {
   onOpen: () => send({ t: 'join', id: myId, name: store.get('name') }),
   onMessage: (m) => onMessage(m),
-  onClose: () => toast('接続が切れました。再接続中…'),
+  onClose: () => toast('せつぞくがきれました。さいせつぞくちゅう…'),
   onError: (text) => {
     toast(text);
     leaveRoom();
@@ -277,7 +277,7 @@ function onMessage(m) {
       leaveRoom();
       break;
     case 'kicked':
-      toast('ホストに外されました');
+      toast('ホストにはずされました');
       store.del(idKey());
       myId = null;
       leaveRoom();
@@ -356,10 +356,10 @@ function onMessage(m) {
       if (m.point) splat(m.point, !!m.hit);
       if (m.hit) {
         beep(520, 0.25, 'triangle', 0.2, 500);
-        if (m.hit === myId) toast('見つかった！');
+        if (m.hit === myId) toast('みつかった！');
       } else {
         beep(180, 0.1, 'square', 0.06, -60);
-        if (m.penalty && m.from === myId) feed(`はずれ！ 残り時間 -${m.penalty}秒`);
+        if (m.penalty && m.from === myId) feed(`はずれ！ のこりじかん -${m.penalty}びょう`);
       }
       break;
     case 'log':
@@ -493,8 +493,11 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 
+// 隠れる側はじゅんび中も、さがされている間（見つかるまで）もぬれる
+const canPaint = () => viewMode === 'hider' || viewMode === 'frozen';
+
 function onKey(e) {
-  if (viewMode === 'hider') {
+  if (canPaint()) {
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
       e.preventDefault();
       return e.shiftKey ? redo() : undo();
@@ -508,7 +511,7 @@ function onKey(e) {
       setHiderMode(hiderMode === 'move' ? 'paint' : 'move');
       return;
     }
-    if (hiderMode === 'move') {
+    if (hiderMode === 'move' && viewMode === 'hider') {
       const poseKeys = Object.keys(POSES);
       const n = Number(e.key);
       if (n >= 1 && n <= poseKeys.length) setPose(poseKeys[n - 1]);
@@ -517,7 +520,7 @@ function onKey(e) {
       if (e.code === 'KeyC') tilt(1);
       if (e.code === 'KeyV') tilt(-1);
       if (e.code === 'KeyR') resetRot();
-    } else {
+    } else if (hiderMode === 'paint') {
       const tl = ['brush', 'eraser', 'picker', 'fill', 'rotate'];
       const n = Number(e.key);
       if (n >= 1 && n <= tl.length) setTool(tl[n - 1]);
@@ -558,7 +561,7 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  if (viewMode === 'hider' && hiderMode === 'paint' && pointers.size === 1) {
+  if (canPaint() && hiderMode === 'paint' && pointers.size === 1) {
     const rotate = e.button === 2 || e.button === 1 || tool === 'rotate';
     if (!rotate) {
       p.kind = 'paint';
@@ -864,7 +867,7 @@ function commitGroup(ops) {
 
 function fillAt(cx, cy) {
   const hit = hitMyBody(cx, cy);
-  if (!hit) return toast('自分の体をタップしてね');
+  if (!hit) return toast('じぶんのからだをタップしてね');
   redoStack = [];
   commitGroup([{ k: 'f', p: hit.part, c: color }]);
 }
@@ -911,7 +914,7 @@ function pickColor(cx, cy) {
   gl.readPixels(Math.floor(cx * dpr), Math.floor((innerHeight - cy) * dpr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
   const hex = '#' + [buf[0], buf[1], buf[2]].map((v) => v.toString(16).padStart(2, '0')).join('');
   setColor(hex, true);
-  toast(`色を取ったよ ${hex}`);
+  toast(`いろをとったよ ${hex}`);
   if (tool === 'picker') setTool('brush');
 }
 
@@ -1233,16 +1236,16 @@ function renderHud() {
   }
   const info = me();
   const left = S.players.filter((p) => p.role === 'hider' && !p.found).length;
-  $('phaseLabel').textContent = S.phase === 'prep' ? '準備タイム' : `捜索中・残り${left}人`;
+  $('phaseLabel').textContent = S.phase === 'prep' ? 'じゅんびタイム' : `さがしちゅう・のこり${left}にん`;
   const rl = $('roleLabel');
   if (info?.role === 'seeker') {
-    rl.textContent = '👹 鬼';
+    rl.textContent = '👹 おに';
     rl.className = 'seeker';
   } else if (info?.role === 'hider') {
-    rl.textContent = info.found ? '😵 見つかった' : '🦎 隠れる側';
+    rl.textContent = info.found ? '😵 みつかった' : '🦎 かくれるがわ';
     rl.className = '';
   } else {
-    rl.textContent = '👀 観戦';
+    rl.textContent = '👀 かんせん';
     rl.className = '';
   }
   renderHint();
@@ -1254,16 +1257,18 @@ function renderHint() {
   let html = '';
   if (viewMode === 'hider') {
     html = hiderMode === 'move'
-      ? '<b>移動モード</b><br>WASD：移動　Q/E：下/上（浮けます）<br>ドラッグ：カメラ　ホイール：ズーム<br>1〜7：ポーズ　Z/X：回転　C/V：前後に傾ける　R：傾きリセット<br><b>スペース：ペイントモードへ</b>'
-      : '<b>ペイントモード</b><br>左ドラッグ：塗る　右ドラッグ：カメラ　ホイール：ズーム<br>Alt+クリック：スポイト　1〜5：道具　[ ]：太さ<br>Ctrl+Z：戻す　Ctrl+Y：やり直し<br><b>スペース：移動モードへ</b>';
+      ? '<b>いどうモード</b><br>WASD：いどう　Q/E：した/うえ（うけます）<br>ドラッグ：カメラ　ホイール：ズーム<br>1〜7：ポーズ　Z/X：かいてん　C/V：まえうしろにかたむける　R：かたむきリセット<br><b>スペース：ペイントモードへ</b>'
+      : '<b>ペイントモード</b><br>ひだりドラッグ：ぬる　みぎドラッグ：カメラ　ホイール：ズーム<br>Alt+クリック：スポイト　1〜5：どうぐ　[ ]：ふとさ<br>Ctrl+Z：もどす　Ctrl+Y：やりなおし<br><b>スペース：いどうモードへ</b>';
   } else if (viewMode === 'fps') {
     html = document.pointerLockElement
-      ? '<b>鬼</b>　WASD：移動　Shift：走る　スペース：ジャンプ<br>クリック：ペイント弾（外すと時間が減る）　Esc：マウス解放'
-      : '<b>画面をクリックして視点操作を開始</b>';
+      ? '<b>おに</b>　WASD：いどう　Shift：はしる　スペース：ジャンプ<br>クリック：ペイントだん（はずすとじかんがへる）　Esc：マウスかいほう'
+      : '<b>がめんをクリックしてしてんそうさをスタート</b>';
   } else if (viewMode === 'frozen') {
-    html = '隠れ中… 動けません。ドラッグでまわりを見られます';
+    html = hiderMode === 'paint'
+      ? '<b>かくれちゅう（ペイントできます）</b><br>ひだりドラッグ：ぬる　みぎドラッグ：カメラ　Alt+クリック：スポイト<br>Ctrl+Z：もどす　<b>スペース：みまわす</b>'
+      : 'かくれちゅう… うごけません。ドラッグでまわりをみられます<br><b>スペース：ペイント（みつかるまでぬれます）</b>';
   } else if (viewMode === 'free') {
-    html = '観戦中　WASD：移動　Q/E：上下　ドラッグ：視点';
+    html = 'かんせんちゅう　WASD：いどう　Q/E：うえ・した　ドラッグ：してん';
   }
   el.innerHTML = html;
   el.classList.toggle('hidden', !html);
@@ -1273,7 +1278,7 @@ document.addEventListener('pointerlockchange', renderHint);
 function renderTouch() {
   const show = isTouch && ['hider', 'fps', 'free'].includes(viewMode) && !(viewMode === 'hider' && hiderMode === 'paint');
   $('touch').classList.toggle('hidden', !show);
-  $('touch').classList.toggle('withTools', viewMode === 'hider');
+  $('touch').classList.toggle('withTools', canPaint());
   $('touch').classList.toggle('toolsCollapsed', $('tools').classList.contains('collapsed'));
   const btns = $('touchBtns');
   btns.replaceChildren();
@@ -1294,61 +1299,64 @@ const PALETTE = ['#ffffff', '#d9d9d9', '#8c8c8c', '#3a3a3a', '#000000', '#8a5a34
 
 function renderTools() {
   const el = $('tools');
-  const show = viewMode === 'hider';
+  const show = canPaint();
   el.classList.toggle('hidden', !show);
   if (!show) return;
+  const frozen = viewMode === 'frozen';
   const scroll = el.scrollTop;
   const collapsed = el.classList.contains('collapsed');
   const sel = (cond) => (cond ? 'on' : 'sub');
   const parts = [];
   parts.push(
     h('div', { class: 'grid2' },
-      h('button', { class: sel(hiderMode === 'move'), onclick: () => setHiderMode('move') }, '🚶 移動・ポーズ'),
+      h('button', { class: sel(hiderMode === 'move'), onclick: () => setHiderMode('move') }, frozen ? '👀 みまわす' : '🚶 いどう・ポーズ'),
       h('button', { class: sel(hiderMode === 'paint'), onclick: () => setHiderMode('paint') }, '🎨 ペイント'),
     ),
   );
   if (isTouch) {
-    parts.push(h('button', { class: 'sub small', onclick: () => { el.classList.toggle('collapsed'); renderTools(); renderTouch(); } }, collapsed ? '▲ ツールを開く' : '▼ ツールをたたむ'));
+    parts.push(h('button', { class: 'sub small', onclick: () => { el.classList.toggle('collapsed'); renderTools(); renderTouch(); } }, collapsed ? '▲ ツールをひらく' : '▼ ツールをたたむ'));
   }
-  if (hiderMode === 'move') {
+  if (hiderMode === 'move' && frozen) {
+    parts.push(h('p', { class: 'muted' }, 'もううごけないけど、みつかるまではペイントでいろをぬりなおせるよ。おにのうごきをみながらなおそう！'));
+  } else if (hiderMode === 'move') {
     parts.push(
       h('div', {},
         h('h4', {}, 'ポーズ'),
         h('div', { class: 'grid' }, Object.entries(POSES).map(([k, p]) => h('button', { class: sel(self.pose === k), onclick: () => setPose(k) }, p.label))),
       ),
       h('div', {},
-        h('h4', {}, '向き・傾き'),
+        h('h4', {}, 'むき・かたむき'),
         h('div', { class: 'grid' },
-          h('button', { class: 'sub', onclick: () => turn(-1) }, '⟲ 左'),
-          h('button', { class: 'sub', onclick: () => turn(1) }, '⟳ 右'),
-          h('button', { class: 'sub', onclick: resetRot }, '傾き0'),
-          h('button', { class: 'sub', onclick: () => tilt(1) }, '前へ倒す'),
-          h('button', { class: 'sub', onclick: () => tilt(-1) }, '後ろへ倒す'),
-          h('button', { class: 'sub', onclick: () => roll(1) }, '横に倒す'),
+          h('button', { class: 'sub', onclick: () => turn(-1) }, '⟲ ひだり'),
+          h('button', { class: 'sub', onclick: () => turn(1) }, '⟳ みぎ'),
+          h('button', { class: 'sub', onclick: resetRot }, 'かたむき0'),
+          h('button', { class: 'sub', onclick: () => tilt(1) }, 'まえへたおす'),
+          h('button', { class: 'sub', onclick: () => tilt(-1) }, 'うしろへたおす'),
+          h('button', { class: 'sub', onclick: () => roll(1) }, 'よこにたおす'),
         ),
       ),
-      h('p', { class: 'muted' }, '場所とポーズを決めたら、ペイントで背景に溶け込もう！ 空中にも浮けます（Q/E・⬆⬇）'),
+      h('p', { class: 'muted' }, 'ばしょとポーズをきめたら、ペイントではいけいにとけこもう！ くうちゅうにもうけます（Q/E・⬆⬇）'),
     );
   } else {
-    const tools = [['brush', '🖌 ブラシ'], ['eraser', '🧽 消しゴム'], ['picker', '💧 スポイト'], ['fill', '🪣 パーツ塗り'], ['rotate', '🔄 視点']];
+    const tools = [['brush', '🖌 ブラシ'], ['eraser', '🧽 けしゴム'], ['picker', '💧 スポイト'], ['fill', '🪣 パーツぬり'], ['rotate', '🔄 してん']];
     parts.push(
       h('div', {},
-        h('h4', {}, '道具'),
+        h('h4', {}, 'どうぐ'),
         h('div', { class: 'grid' }, tools.map(([k, l]) => h('button', { class: sel(tool === k), onclick: () => setTool(k) }, l))),
       ),
       h('div', {},
-        h('h4', {}, '太さ ', h('span', { id: 'brushLabel' }, `${brushCm}cm`)),
+        h('h4', {}, 'ふとさ ', h('span', { id: 'brushLabel' }, `${brushCm}cm`)),
         h('input', { type: 'range', id: 'brushRange', min: 1, max: 40, value: brushCm, oninput: (e) => setBrush(Number(e.target.value)) }),
       ),
       h('div', {},
-        h('h4', {}, '色（スポイトで背景の色を取ると溶け込みやすい）'),
+        h('h4', {}, 'いろ（スポイトではいけいのいろをとるととけこみやすい）'),
         h('div', { class: 'colorRow' },
           h('div', { class: 'curColor', style: `background:${color}` }),
           h('input', { type: 'color', value: color, onchange: (e) => setColor(e.target.value, true) }),
         ),
       ),
       recent.length > 0 && h('div', {},
-        h('h4', {}, '最近の色'),
+        h('h4', {}, 'さいきんのいろ'),
         h('div', { class: 'swatches' }, recent.map((c) => h('div', { class: 'sw' + (c === color ? ' cur' : ''), style: `background:${c}`, onclick: () => setColor(c) }))),
       ),
       h('div', {},
@@ -1356,11 +1364,11 @@ function renderTools() {
         h('div', { class: 'swatches' }, PALETTE.map((c) => h('div', { class: 'sw' + (c === color ? ' cur' : ''), style: `background:${c}`, onclick: () => setColor(c, true) }))),
       ),
       h('div', { class: 'grid' },
-        h('button', { class: 'sub', onclick: undo }, '↶ 戻す'),
-        h('button', { class: 'sub', onclick: redo }, '↷ やり直し'),
-        h('button', { class: 'sub', onclick: () => confirm('全身を真っ白に戻しますか？') && clearAll() }, '🗑 全消し'),
+        h('button', { class: 'sub', onclick: undo }, '↶ もどす'),
+        h('button', { class: 'sub', onclick: redo }, '↷ やりなおし'),
+        h('button', { class: 'sub', onclick: () => confirm('ぜんしんをまっしろにもどしますか？') && clearAll() }, '🗑 ぜんぶけす'),
       ),
-      h('button', { class: 'sub', onclick: fillAllParts }, '全身をこの色で塗る'),
+      h('button', { class: 'sub', onclick: fillAllParts }, 'ぜんしんをこのいろでぬる'),
     );
   }
   el.replaceChildren(...parts.filter(Boolean));
@@ -1376,12 +1384,12 @@ function playerList(opts = {}) {
         p.id === S.hostId && h('span', { class: 'tag host' }, 'ホスト'),
         p.id === myId && h('span', { class: 'tag' }, 'あなた'),
         p.cpu && h('span', { class: 'tag' }, '🤖 CPU'),
-        p.role === 'seeker' && S.phase !== 'lobby' && h('span', { class: 'tag seek' }, '鬼'),
-        !p.online && h('span', { class: 'tag' }, '切断中'),
+        p.role === 'seeker' && S.phase !== 'lobby' && h('span', { class: 'tag seek' }, 'おに'),
+        !p.online && h('span', { class: 'tag' }, 'せつだんちゅう'),
       ),
-      h('span', { class: 'sc' }, `${p.score}点`),
+      h('span', { class: 'sc' }, `${p.score}てん`),
       isHost() && p.id !== myId && opts.kick &&
-        h('button', { class: 'small sub', onclick: () => confirm(`${p.name} さんを外しますか？`) && send({ t: 'kick', target: p.id }) }, '外す'),
+        h('button', { class: 'small sub', onclick: () => confirm(`${p.name} さんをはずしますか？`) && send({ t: 'kick', target: p.id }) }, 'はずす'),
     )),
   );
 }
@@ -1389,14 +1397,14 @@ function playerList(opts = {}) {
 function rulesCard() {
   return h('div', { class: 'card' },
     h('details', {},
-      h('summary', {}, '遊び方'),
+      h('summary', {}, 'あそびかた'),
       h('ol', { class: 'rules' },
-        h('li', {}, '鬼と隠れる側に分かれます。'),
-        h('li', {}, '準備タイム：隠れる側は部屋の中で隠れる場所とポーズを決め、真っ白な体にペイントして背景に溶け込みます。鬼はその間、目をつぶって待機。'),
-        h('li', {}, 'スポイトで背景の色を拾い、レンガの目地や本の背表紙まで描き込むのがコツ！'),
-        h('li', {}, '捜索タイム：隠れる側は動けません。鬼はあやしい所にペイント弾を撃って探します。外すと残り時間が減ります。'),
-        h('li', {}, '時間切れまで見つからなければ隠れる側の勝ち（+3点）。鬼は1人見つけるごとに+1点。'),
-        h('li', {}, '「増え鬼」モードでは、見つかった人が鬼になります。'),
+        h('li', {}, 'おにとかくれるがわにわかれます。'),
+        h('li', {}, 'じゅんびタイム：かくれるがわはへやのなかでかくれるばしょとポーズをきめ、まっしろなからだにペイントしてはいけいにとけこみます。おにはそのあいだ、めをつぶってたいき。'),
+        h('li', {}, 'スポイトではいけいのいろをひろい、レンガのめじやほんのせびょうしまでかきこむのがコツ！'),
+        h('li', {}, 'さがすタイム：かくれるがわはうごけません。おにはあやしいところにペイントだんをうってさがします。はずすとのこりじかんがへります。'),
+        h('li', {}, 'じかんぎれまでみつからなければかくれるがわのかち（+3てん）。おにはひとりみつけるごとに+1てん。'),
+        h('li', {}, '「ふえおに」モードでは、みつかったひとがおにになります。'),
       ),
     ),
   );
@@ -1415,21 +1423,21 @@ function settingsCard() {
   };
   const n = S.players.filter((p) => p.online).length;
   return h('div', { class: 'card' },
-    h('h2', {}, 'ルール設定', !editable && h('span', { class: 'muted' }, '（ホストが変更できます）')),
+    h('h2', {}, 'ルールせってい', !editable && h('span', { class: 'muted' }, '（ホストがへんこうできます）')),
     h('div', { class: 'settings' },
       h('label', {}, 'ステージ'), sel('map', Object.keys(MAPS), (o) => MAPS[o].name),
-      h('label', {}, 'CPU'), sel('cpus', [0, 1, 2, 3, 4, 5, 6, 7], (o) => (o ? `${o}人` : 'なし')),
-      st.cpus > 0 && h('label', {}, 'CPUの強さ'), st.cpus > 0 && sel('cpuLevel', ['easy', 'normal', 'hard'], (o) => ({ easy: 'よわい', normal: 'ふつう', hard: 'つよい' })[o]),
-      h('label', {}, 'モード'), sel('mode', ['normal', 'infect'], (o) => (o === 'normal' ? 'ノーマル' : '増え鬼（見つかると鬼になる）')),
-      h('label', {}, '鬼の人数'), sel('seekers', [1, 2, 3, 4], (o) => `${o}人`),
-      h('label', {}, '準備タイム'), sel('prepSec', [30, 60, 90, 120, 150, 180, 240, 300], (o) => `${o}秒`),
-      h('label', {}, '捜索タイム'), sel('huntSec', [30, 60, 90, 120, 150, 180, 240], (o) => `${o}秒`),
-      h('label', {}, 'はずれペナルティ'), sel('penaltySec', [0, 2, 3, 5, 10], (o) => (o ? `-${o}秒` : 'なし')),
+      h('label', {}, 'CPU'), sel('cpus', [0, 1, 2, 3, 4, 5, 6, 7], (o) => (o ? `${o}にん` : 'なし')),
+      st.cpus > 0 && h('label', {}, 'CPUのつよさ'), st.cpus > 0 && sel('cpuLevel', ['easy', 'normal', 'hard'], (o) => ({ easy: 'よわい', normal: 'ふつう', hard: 'つよい' })[o]),
+      h('label', {}, 'モード'), sel('mode', ['normal', 'infect'], (o) => (o === 'normal' ? 'ノーマル' : 'ふえおに（みつかるとおにになる）')),
+      h('label', {}, 'おにのにんずう'), sel('seekers', [1, 2, 3, 4], (o) => `${o}にん`),
+      h('label', {}, 'じゅんびタイム'), sel('prepSec', [30, 60, 90, 120, 150, 180, 240, 300], (o) => `${o}びょう`),
+      h('label', {}, 'さがすタイム'), sel('huntSec', [30, 60, 90, 120, 150, 180, 240], (o) => `${o}びょう`),
+      h('label', {}, 'はずれペナルティ'), sel('penaltySec', [0, 2, 3, 5, 10], (o) => (o ? `-${o}びょう` : 'なし')),
     ),
     editable
-      ? h('button', { style: 'width:100%', disabled: n < 1, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? '次のラウンドへ！' : 'ゲーム開始！')
-      : h('p', { class: 'muted' }, 'ホストの開始を待っています…'),
-    editable && n === 1 && !st.cpus && h('p', { class: 'muted' }, '1人なら練習モード：隠れて、自分の擬態をいろんな角度からじっくり見られます。CPUを入れると対戦できます'),
+      ? h('button', { style: 'width:100%', disabled: n < 1, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? 'つぎのラウンドへ！' : 'ゲームスタート！')
+      : h('p', { class: 'muted' }, 'ホストのスタートをまっています…'),
+    editable && n === 1 && !st.cpus && h('p', { class: 'muted' }, 'ひとりなられんしゅうモード：かくれて、じぶんのぎたいをいろんなかくどからじっくりみられます。CPUをいれるとたいせんできます'),
   );
 }
 
@@ -1437,18 +1445,18 @@ function renderPanel() {
   const el = $('panel');
   const out = [];
   if (!netMode) {
-    out.push(h('div', { class: 'card' }, '読み込み中…'));
+    out.push(h('div', { class: 'card' }, 'よみこみちゅう…'));
   } else if (!link) {
     out.push(...joinCards());
   } else if (!joined || !S) {
     out.push(h('div', { class: 'card' },
-      h('p', {}, offline ? 'CPU戦を準備しています…' : netMode === 'p2p' ? (hosting ? `部屋「${roomCode}」を準備しています…` : `部屋「${roomCode}」に接続しています…`) : '接続中…'),
+      h('p', {}, offline ? 'CPUせんをじゅんびしています…' : netMode === 'p2p' ? (hosting ? `へや「${roomCode}」をじゅんびしています…` : `へや「${roomCode}」にせつぞくしています…`) : 'せつぞくちゅう…'),
       netMode === 'p2p' && h('button', { class: 'sub small', onclick: leaveRoom }, 'やめる'),
     ));
   } else if (S.phase === 'lobby') {
     out.push(
       inviteCard(),
-      h('div', { class: 'card' }, h('h2', {}, `プレイヤー（${S.players.filter((p) => p.online).length}人）`), playerList({ kick: true }), nameRow()),
+      h('div', { class: 'card' }, h('h2', {}, `プレイヤー（${S.players.filter((p) => p.online).length}にん）`), playerList({ kick: true }), nameRow()),
       settingsCard(),
       rulesCard(),
     );
@@ -1457,20 +1465,20 @@ function renderPanel() {
     out.push(
       h('div', { class: 'card' },
         r.solo
-          ? h('div', { class: 'banner h' }, '🎨 練習おしまい！')
-          : h('div', { class: `banner ${r.winner === 'hiders' ? 'h' : 's'}` }, r.winner === 'hiders' ? '🦎 隠れる側の勝ち！' : '👹 鬼の勝ち！'),
+          ? h('div', { class: 'banner h' }, '🎨 れんしゅうおしまい！')
+          : h('div', { class: `banner ${r.winner === 'hiders' ? 'h' : 's'}` }, r.winner === 'hiders' ? '🦎 かくれるがわのかち！' : '👹 おにのかち！'),
         h('p', { style: 'text-align:center' }, r.reason),
-        (r.survivors || []).length > 0 && h('p', {}, '逃げ切り：', r.survivors.map(nameOf).join('、'), '（+3点）'),
+        (r.survivors || []).length > 0 && h('p', {}, 'にげきり：', r.survivors.map(nameOf).join('、'), '（+3てん）'),
         S.foundLog.length > 0 && h('div', {},
-          h('p', { class: 'muted' }, '見つかった順'),
-          S.foundLog.map((f) => h('p', {}, `⏱ ${Math.floor(f.at / 1000)}秒　${nameOf(f.by)} → ${nameOf(f.id)}`)),
+          h('p', { class: 'muted' }, 'みつかったじゅん'),
+          S.foundLog.map((f) => h('p', {}, `⏱ ${Math.floor(f.at / 1000)}びょう　${nameOf(f.by)} → ${nameOf(f.id)}`)),
         ),
-        h('button', { class: 'sub', style: 'width:100%;margin-top:8px', onclick: () => { resultPanelHidden = true; renderPanel(); } }, '👀 答え合わせ（ステージを見て回る）'),
+        h('button', { class: 'sub', style: 'width:100%;margin-top:8px', onclick: () => { resultPanelHidden = true; renderPanel(); } }, '👀 こたえあわせ（ステージをみてまわる）'),
       ),
-      h('div', { class: 'card' }, h('h2', {}, '得点'), playerList({ byScore: true, kick: true }), nameRow()),
+      h('div', { class: 'card' }, h('h2', {}, 'とくてん'), playerList({ byScore: true, kick: true }), nameRow()),
       settingsCard(),
-      isHost() && h('div', { class: 'card' }, h('button', { class: 'sub', onclick: () => send({ t: 'abort' }) }, 'ロビーに戻る'), ' ',
-        h('button', { class: 'sub', onclick: () => confirm('全員の得点を0にしますか？') && send({ t: 'resetScores' }) }, '得点リセット')),
+      isHost() && h('div', { class: 'card' }, h('button', { class: 'sub', onclick: () => send({ t: 'abort' }) }, 'ロビーにもどる'), ' ',
+        h('button', { class: 'sub', onclick: () => confirm('ぜんいんのとくてんを0にしますか？') && send({ t: 'resetScores' }) }, 'とくてんリセット')),
     );
   } else if (menuOpen) {
     out.push(
@@ -1478,10 +1486,10 @@ function renderPanel() {
         h('h2', {}, 'メニュー'),
         playerList(),
         isHost() && h('div', { class: 'row', style: 'margin-top:10px;flex-wrap:wrap' },
-          S.phase === 'prep' && h('button', { class: 'sub', onclick: () => send({ t: 'skip' }) }, '準備を終わらせる'),
-          h('button', { class: 'danger', onclick: () => confirm('このラウンドを中止しますか？') && send({ t: 'abort' }) }, 'ラウンド中止'),
+          S.phase === 'prep' && h('button', { class: 'sub', onclick: () => send({ t: 'skip' }) }, 'じゅんびをおわらせる'),
+          h('button', { class: 'danger', onclick: () => confirm('このラウンドをちゅうししますか？') && send({ t: 'abort' }) }, 'ラウンドちゅうし'),
         ),
-        h('button', { style: 'width:100%;margin-top:10px', onclick: () => { menuOpen = false; renderPanel(); } }, '閉じる'),
+        h('button', { style: 'width:100%;margin-top:10px', onclick: () => { menuOpen = false; renderPanel(); } }, 'とじる'),
       ),
     );
   }
@@ -1500,38 +1508,38 @@ function joinCards() {
   const title = h('div', { class: 'card title' },
     h('div', { class: 'logo' }, '🦎'),
     h('h1', {}, 'めっちゃカイトオン'),
-    h('p', { class: 'muted' }, '体に絵を描いて背景に溶け込む、お絵かきかくれんぼ。PC・スマホのブラウザで対戦！'),
+    h('p', { class: 'muted' }, 'からだにえをかいてはいけいにとけこむ、おえかきかくれんぼ。PC・スマホのブラウザでたいせん！'),
   );
   const cpuCard = h('div', { class: 'card' },
-    h('button', { style: 'width:100%;font-size:18px;padding:14px', onclick: () => takeName() && connect('cpu') }, '🤖 CPUとすぐ遊ぶ'),
-    h('p', { class: 'muted' }, '部屋を作らずに、このままCPUと対戦します（ステージやCPUの強さは結果画面で変えられます）'),
+    h('button', { style: 'width:100%;font-size:18px;padding:14px', onclick: () => takeName() && connect('cpu') }, '🤖 CPUとすぐあそぶ'),
+    h('p', { class: 'muted' }, 'へやをつくらずに、このままCPUとたいせんします（ステージやCPUのつよさはけっかがめんでかえられます）'),
   );
   if (netMode === 'server') {
     const go = () => takeName() && connect();
     nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && !e.isComposing && go());
-    return [title, cpuCard, h('div', { class: 'card' }, h('h2', {}, 'みんなで遊ぶ'), h('div', { class: 'row' }, nameInput, h('button', { onclick: go }, 'はじめる'))), rulesCard()];
+    return [title, cpuCard, h('div', { class: 'card' }, h('h2', {}, 'みんなであそぶ'), h('div', { class: 'row' }, nameInput, h('button', { onclick: go }, 'はじめる'))), rulesCard()];
   }
   const urlCode = normalizeCode(new URLSearchParams(location.search).get('room'));
-  const codeInput = h('input', { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', placeholder: '部屋番号（4桁の数字）', maxlength: 4, value: urlCode, style: 'letter-spacing:.2em;font-weight:800' });
+  const codeInput = h('input', { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', placeholder: 'へやばんごう（4けたのすうじ）', maxlength: 4, value: urlCode, style: 'letter-spacing:.2em;font-weight:800' });
   const join = () => {
     const code = normalizeCode(codeInput.value);
-    if (code.length !== 4) return toast('部屋番号（4桁の数字）を入れてね');
+    if (code.length !== 4) return toast('へやばんごう（4けたのすうじ）をいれてね');
     if (takeName()) connect('join', code);
   };
   const host = () => takeName() && connect('host', makeRoomCode(), true);
   codeInput.addEventListener('keydown', (e) => e.key === 'Enter' && !e.isComposing && join());
   const joinCard = h('div', { class: 'card' },
-    h('h2', {}, '部屋に入る'),
-    h('div', { class: 'row' }, codeInput, h('button', { onclick: join }, '入る')),
+    h('h2', {}, 'へやにはいる'),
+    h('div', { class: 'row' }, codeInput, h('button', { onclick: join }, 'はいる')),
   );
   const hostCard = h('div', { class: 'card' },
-    h('h2', {}, '部屋を作る'),
-    h('p', { class: 'muted' }, 'あなたがホストになります。できればPCで作ってね（ホストの画面を閉じると部屋がなくなります）'),
-    h('button', { class: urlCode ? 'sub' : '', style: 'width:100%', onclick: host }, '新しい部屋を作る'),
+    h('h2', {}, 'へやをつくる'),
+    h('p', { class: 'muted' }, 'あなたがホストになります。できればPCでつくってね（ホストのがめんをとじるとへやがなくなります）'),
+    h('button', { class: urlCode ? 'sub' : '', style: 'width:100%', onclick: host }, 'あたらしいへやをつくる'),
   );
   return [
     title,
-    h('div', { class: 'card' }, h('h2', {}, 'ニックネーム'), nameInput, h('p', { class: 'muted' }, '空のままなら自動で名前がつきます')),
+    h('div', { class: 'card' }, h('h2', {}, 'ニックネーム'), nameInput, h('p', { class: 'muted' }, 'からのままならじどうでなまえがつきます')),
     ...(urlCode ? [joinCard, hostCard, cpuCard] : [cpuCard, hostCard, joinCard]),
     rulesCard(),
   ];
@@ -1540,14 +1548,14 @@ function joinCards() {
 function inviteCard() {
   if (offline) {
     return h('div', { class: 'card' },
-      h('h2', {}, '🤖 CPUと対戦中'),
-      h('p', { class: 'muted' }, '下の設定でステージやCPUの人数・強さを変えて、「ゲーム開始！」を押してね。友だちと遊ぶときは「CPU戦をやめる」から部屋を作ってね'),
+      h('h2', {}, '🤖 CPUとたいせんちゅう'),
+      h('p', { class: 'muted' }, 'したのせっていでステージやCPUのにんずう・つよさをかえて、「ゲームスタート！」をおしてね。ともだちとあそぶときは「CPUせんをやめる」からへやをつくってね'),
     );
   }
   if (netMode !== 'p2p') {
     return h('div', { class: 'card' },
-      h('h2', {}, '友だちを呼ぼう'),
-      h('p', { class: 'muted' }, '同じWiFiにつないで、ブラウザでこのアドレスを開いてね'),
+      h('h2', {}, 'ともだちをよぼう'),
+      h('p', { class: 'muted' }, 'おなじWiFiにつないで、ブラウザでこのアドレスをひらいてね'),
       (S.urls.length ? S.urls : [location.origin]).map((u) => h('div', { class: 'url' }, u)),
     );
   }
@@ -1557,40 +1565,40 @@ function inviteCard() {
       await navigator.clipboard.writeText(url);
       toast('URLをコピーしました');
     } catch {
-      prompt('このURLを送ってね', url);
+      prompt('このURLをおくってね', url);
     }
   };
-  const shareBtn = navigator.share && h('button', { class: 'sub small', onclick: () => navigator.share({ title: 'めっちゃカイトオン', text: `部屋番号 ${roomCode} で遊ぼう！`, url }).catch(() => {}) }, '共有');
+  const shareBtn = navigator.share && h('button', { class: 'sub small', onclick: () => navigator.share({ title: 'めっちゃカイトオン', text: `へやばんごう ${roomCode} であそぼう！`, url }).catch(() => {}) }, 'きょうゆう');
   return h('div', { class: 'card' },
-    h('h2', {}, '友だちを呼ぼう'),
-    h('p', {}, '部屋番号：', h('span', { class: 'url', style: 'font-size:30px;letter-spacing:.2em' }, roomCode)),
-    h('p', { class: 'muted' }, 'このURLを送るか、部屋番号を入力してもらってね。1人でも練習できます'),
+    h('h2', {}, 'ともだちをよぼう'),
+    h('p', {}, 'へやばんごう：', h('span', { class: 'url', style: 'font-size:30px;letter-spacing:.2em' }, roomCode)),
+    h('p', { class: 'muted' }, 'このURLをおくるか、へやばんごうをにゅうりょくしてもらってね。ひとりでもれんしゅうできます'),
     h('div', { class: 'url', style: 'font-size:14px' }, url),
     h('div', { class: 'row', style: 'margin-top:8px' },
       h('button', { class: 'sub small', onclick: copy }, 'URLをコピー'),
       shareBtn,
     ),
-    hosting && h('p', { class: 'muted' }, '⚠ あなたがホストです。この画面を閉じたり、別のタブ・アプリに切り替えたままにしないでね'),
+    hosting && h('p', { class: 'muted' }, '⚠ あなたがホストです。このがめんをとじたり、べつのタブ・アプリにきりかえたままにしないでね'),
   );
 }
 
 function nameRow() {
   return h('div', { class: 'row', style: 'margin-top:10px' },
-    offline && h('button', { class: 'small sub', onclick: leaveRoom }, 'CPU戦をやめる'),
+    offline && h('button', { class: 'small sub', onclick: leaveRoom }, 'CPUせんをやめる'),
     !offline && netMode === 'p2p' && h('button', {
       class: 'small sub',
-      onclick: () => confirm(hosting ? '部屋を閉じますか？（全員の接続が切れます）' : '部屋を出ますか？') && leaveRoom(),
-    }, hosting ? '部屋を閉じる' : '部屋を出る'),
+      onclick: () => confirm(hosting ? 'へやをとじますか？（ぜんいんのせつぞくがきれます）' : 'へやをでますか？') && leaveRoom(),
+    }, hosting ? 'へやをとじる' : 'へやをでる'),
     h('button', {
       class: 'small sub',
       onclick: () => {
-        const n = prompt('新しい名前', me()?.name || '');
+        const n = prompt('あたらしいなまえ', me()?.name || '');
         if (n && n.trim()) {
           store.set('name', n.trim());
           send({ t: 'rename', name: n.trim() });
         }
       },
-    }, '名前を変える'),
+    }, 'なまえをかえる'),
   );
 }
 
@@ -1605,7 +1613,7 @@ menuBtn.addEventListener('click', () => {
 function renderMenuButton() {
   const show = joined && S && (S.phase === 'prep' || S.phase === 'hunt' || (S.phase === 'result' && resultPanelHidden));
   menuBtn.classList.toggle('hidden', !show);
-  menuBtn.textContent = S?.phase === 'result' ? '📋 結果を見る' : '☰ メニュー';
+  menuBtn.textContent = S?.phase === 'result' ? '📋 けっかをみる' : '☰ メニュー';
 }
 
 // ===========================================================================

@@ -111,7 +111,7 @@ function peerOptions() {
 
 function PeerCtor() {
   const P = window.peerjs?.Peer;
-  if (!P) throw new Error('通信ライブラリ（PeerJS）を読み込めませんでした');
+  if (!P) throw new Error('つうしんライブラリ（PeerJS）をよみこめませんでした');
   return P;
 }
 
@@ -189,24 +189,24 @@ export function hostP2P(code, shareUrl, cb, fresh = false) {
         }
         // 再読み込み直後は前の接続が残っていることがあるので、少し待って取り直す
         if (attempts++ < 8) {
-          cb.onStatus?.('部屋を準備しています…');
+          cb.onStatus?.('へやをじゅんびしています…');
           peer.destroy();
           setTimeout(() => !closed && start(), 2500);
         } else {
-          cb.onError('その部屋番号は使われています。別の部屋を作ってね');
+          cb.onError('そのへやばんごうはつかわれています。べつのへやをつくってね');
         }
         return;
       }
-      if (err.type === 'browser-incompatible') return cb.onError('このブラウザはP2P通信に対応していません');
+      if (err.type === 'browser-incompatible') return cb.onError('このブラウザはP2Pつうしんにたいおうしていません');
       if (RETRY_TYPES.has(err.type)) {
-        cb.onStatus?.('サーバーとの接続が不安定です…');
+        cb.onStatus?.('サーバーとのせつぞくがふあんていです…');
         if (!room) {
           peer.destroy();
           setTimeout(() => !closed && start(), 3000);
         }
         return;
       }
-      cb.onStatus?.(`通信エラー（${err.type}）`);
+      cb.onStatus?.(`つうしんエラー（${err.type}）`);
     });
   }
   start();
@@ -266,12 +266,12 @@ export function joinP2P(code, cb) {
     peer.on('error', (err) => {
       if (closed) return;
       if (err.type === 'peer-unavailable') {
-        if (!everOpened) return cb.onError(`部屋「${code}」が見つかりません。番号を確認してね`);
-        cb.onStatus?.('ホストを探しています…');
+        if (!everOpened) return cb.onError(`へや「${code}」がみつかりません。ばんごうをかくにんしてね`);
+        cb.onStatus?.('ホストをさがしています…');
         return retry(3000);
       }
-      if (err.type === 'browser-incompatible') return cb.onError('このブラウザはP2P通信に対応していません');
-      cb.onStatus?.('接続が不安定です…');
+      if (err.type === 'browser-incompatible') return cb.onError('このブラウザはP2Pつうしんにたいおうしていません');
+      cb.onStatus?.('せつぞくがふあんていです…');
       if (RETRY_TYPES.has(err.type)) {
         peer.destroy();
         retry(3000);
