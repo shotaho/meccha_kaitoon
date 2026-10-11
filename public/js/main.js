@@ -455,10 +455,55 @@ function onPhaseChange(prev) {
   if (S.phase === 'hunt' && prev === 'prep') {
     beep(440, 0.3, 'sawtooth', 0.08, 220);
   }
-  if (S.phase === 'result') {
-    beep(784, 0.15);
-    setTimeout(() => beep(988, 0.15), 140);
-    setTimeout(() => beep(1318, 0.3), 280);
+  if (S.phase === 'result' && prev && prev !== 'lobby') showResultSplash();
+}
+
+// ラウンド終了時に、どちらの勝ちかを画面いっぱいに出す
+let splashTimer = 0;
+function showResultSplash() {
+  const r = S.result || {};
+  const info = me();
+  const seekersWin = r.winner === 'seekers';
+  const team = info?.role === 'seeker' ? 'seekers' : info?.role === 'hider' ? 'hiders' : null;
+  const won = team && team === r.winner;
+  let mine = null;
+  if (team) {
+    if (won) mine = team === 'hiders' && info.found ? '🎉 なかまがにげきった！ あなたのチームのかち！' : '🎉 あなたのかち！';
+    else mine = '😢 あなたのまけ…';
+  }
+  const caught = S.foundLog.length;
+  const left = (r.survivors || []).length;
+
+  document.getElementById('splash')?.remove();
+  const el = h('div', { id: 'splash', class: seekersWin ? 's' : 'h' },
+    h('div', { class: 'sp-who' }, seekersWin ? '👹' : '🦎'),
+    h('div', { class: 'sp-title' }, seekersWin ? 'おにのかち！' : 'かくれるがわのかち！'),
+    mine && h('div', { class: `sp-mine ${won ? 'win' : 'lose'}` }, mine),
+    h('div', { class: 'sp-count' }, `にげきり ${left}にん ／ みつかった ${caught}にん`),
+    r.reason && h('div', { class: 'sp-reason' }, r.reason),
+    h('div', { class: 'sp-tap' }, 'タップでとじる'),
+  );
+  if (won || !team) {
+    for (let i = 0; i < 36; i++) {
+      el.append(h('span', {
+        class: 'confetti',
+        style: `left:${Math.random() * 100}%;animation-delay:${Math.random() * 1.2}s;animation-duration:${2 + Math.random() * 1.5}s`,
+      }, ['🎉', '✨', '⭐', '🎊'][i % 4]));
+    }
+  }
+  const close = () => {
+    clearTimeout(splashTimer);
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 300);
+  };
+  el.addEventListener('click', close);
+  document.body.append(el);
+  splashTimer = setTimeout(close, 4500);
+
+  if (won || !team) {
+    [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => beep(f, i === 3 ? 0.45 : 0.14, 'triangle', 0.18), i * 130));
+  } else {
+    [392, 330, 262].forEach((f, i) => setTimeout(() => beep(f, i === 2 ? 0.5 : 0.22, 'sawtooth', 0.07), i * 220));
   }
 }
 

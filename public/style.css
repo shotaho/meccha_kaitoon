@@ -166,9 +166,38 @@ input[type=range] { width: 100%; }
 .tag.host { background: var(--yellow); color: #222; }
 .settings { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; margin-bottom: 12px; }
 .settings label { font-size: 13px; color: var(--muted); }
-.banner { text-align: center; font-size: 28px; font-weight: 900; padding: 6px 0; }
-.banner.h { color: #7dffb0; }
-.banner.s { color: #ff8aa8; }
+.banner { text-align: center; font-size: 30px; font-weight: 900; padding: 14px 8px; border-radius: 14px; color: #fff; margin-bottom: 8px; }
+.banner.h { background: linear-gradient(135deg, #1f8a4c, #2fbf6b); }
+.banner.s { background: linear-gradient(135deg, #c62848, #ef4f6f); }
+
+/* ラウンド終了の勝敗表示 */
+#splash {
+  position: fixed; inset: 0; z-index: 15; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 20px; color: #fff; cursor: pointer;
+  animation: sp-in .35s ease-out;
+}
+#splash.h { background: radial-gradient(circle, rgba(47,191,107,.93), rgba(15,90,45,.95)); }
+#splash.s { background: radial-gradient(circle, rgba(239,79,111,.93), rgba(120,15,40,.95)); }
+#splash.out { opacity: 0; transition: opacity .3s; }
+#splash .sp-who { font-size: 96px; line-height: 1; animation: sp-bounce 1s ease-in-out infinite alternate; }
+#splash .sp-title { font-size: 52px; font-weight: 900; margin: 10px 0; text-shadow: 0 4px 0 rgba(0,0,0,.25); }
+#splash .sp-mine { font-size: 28px; font-weight: 900; padding: 8px 20px; border-radius: 99px; margin: 6px 0 14px; }
+#splash .sp-mine.win { background: #ffd400; color: #222; }
+#splash .sp-mine.lose { background: rgba(0,0,0,.35); }
+#splash .sp-count { font-size: 20px; font-weight: 800; }
+#splash .sp-reason { font-size: 16px; opacity: .9; margin-top: 6px; }
+#splash .sp-tap { position: absolute; bottom: 24px; font-size: 13px; opacity: .7; }
+#splash .confetti { position: absolute; top: -40px; font-size: 26px; animation: sp-fall linear infinite; pointer-events: none; }
+@keyframes sp-in { from { opacity: 0; transform: scale(1.15); } to { opacity: 1; transform: none; } }
+@keyframes sp-bounce { from { transform: translateY(0) rotate(-6deg); } to { transform: translateY(-14px) rotate(6deg); } }
+@keyframes sp-fall { to { transform: translateY(110vh) rotate(540deg); } }
+@media (max-width: 700px) {
+  #splash .sp-who { font-size: 72px; }
+  #splash .sp-title { font-size: 36px; }
+  #splash .sp-mine { font-size: 20px; }
+  #splash .sp-count { font-size: 16px; }
+}
 .rules li { margin: 4px 0; font-size: 14px; }
 details summary { cursor: pointer; font-weight: 800; }
 
