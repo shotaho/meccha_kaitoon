@@ -7,7 +7,7 @@ export const BODY_RADIUS = 0.3;
 export const BODY_HEIGHT = 1.7;
 
 // パーツ定義：capsule(r, len) / sphere(r)
-const PARTS = [
+export const PARTS = [
   { name: 'torso', kind: 'capsule', r: 0.25, len: 0.32, tex: 512 },
   { name: 'head', kind: 'sphere', r: 0.21, tex: 256 },
   { name: 'armL', kind: 'capsule', r: 0.085, len: 0.42, tex: 256 },

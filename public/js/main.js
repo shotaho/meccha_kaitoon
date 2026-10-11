@@ -1,11 +1,11 @@
 // めっちゃカイトオン - クライアント
 
 import * as THREE from 'three';
-import { buildWorld, collide, groundAt, ceilingAt } from './world.js';
+import { buildWorld, collide, groundAt, ceilingAt, pushOut } from './world.js';
 import { MAPS, spotView } from './maps.js';
 import { paintCamo } from './camo.js';
 import { createCpuBrains } from './cpu.js';
-import { Character, POSES, BODY_RADIUS } from './character.js';
+import { Character, POSES, PARTS, BODY_RADIUS } from './character.js';
 import { detectServer, connectServer, hostP2P, joinP2P, localRoom, makeRoomCode, normalizeCode } from './net.js';
 
 // ===========================================================================
@@ -1046,6 +1046,7 @@ function step() {
   }
 
   for (const c of chars.values()) c.update(dt);
+  if (viewMode === 'hider') keepBodyOutOfObjects();
   updateVisibility();
   updateCamo();
   brains.update(dt);
@@ -1117,6 +1118,40 @@ function updateHider(dt) {
   const top = ceilingAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, r, hgt, world.bounds);
   self.pos.y = clamp(self.pos.y, g, Math.max(g, top));
   updateOrbitCamera();
+}
+
+// ポーズ・向き・傾きをふくめた体の形で、物にめり込まないように押し出す
+const _v = new THREE.Vector3();
+function bodySpheres(c) {
+  const out = [];
+  c.root.updateMatrixWorld(true);
+  c.parts.forEach((m, i) => {
+    const p = PARTS[i];
+    const r = p.r * 0.9;
+    const ys = p.kind === 'sphere' ? [0] : [-p.len / 2, 0, p.len / 2];
+    for (const y of ys) {
+      _v.set(0, y, 0).applyMatrix4(m.matrixWorld);
+      out.push({ x: _v.x, y: _v.y, z: _v.z, r });
+    }
+  });
+  return out;
+}
+
+function keepBodyOutOfObjects() {
+  const c = myChar();
+  if (!c || c.kind !== 'hider') return;
+  // 近くの物だけを調べる
+  const x = self.pos.x;
+  const z = self.pos.z;
+  const near = world.colliders.filter((b) => b.x0 < x + 3 && b.x1 > x - 3 && b.z0 < z + 3 && b.z1 > z - 3);
+  for (let i = 0; i < 8; i++) {
+    const push = pushOut(near, bodySpheres(c), world.bounds);
+    if (!push) break;
+    self.pos.x += push[0];
+    self.pos.y += push[1];
+    self.pos.z += push[2];
+    c.root.position.copy(self.pos);
+  }
 }
 
 function updateOrbitCamera() {

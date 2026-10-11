@@ -686,6 +686,53 @@ export function collide(colliders, pos, r, h, bounds) {
   pos.z = Math.max(bounds.z0 + m, Math.min(bounds.z1 - m, pos.z));
 }
 
+// 体を小さな球の集まりとして、箱にめり込んでいたら押し出す量を返す（めり込みがなければ null）
+// spheres: [{ x, y, z, r }]
+export function pushOut(colliders, spheres, bounds) {
+  let best = null;
+  let bestLen = 0.002;
+  const consider = (px, py, pz) => {
+    const l = Math.hypot(px, py, pz);
+    if (l > bestLen) {
+      bestLen = l;
+      best = [px, py, pz];
+    }
+  };
+  for (const s of spheres) {
+    // 床・天井・外側の見えない壁
+    if (s.y - s.r < 0) consider(0, s.r - s.y, 0);
+    if (s.y + s.r > bounds.h) consider(0, bounds.h - s.r - s.y, 0);
+    if (s.x - s.r < bounds.x0) consider(bounds.x0 + s.r - s.x, 0, 0);
+    if (s.x + s.r > bounds.x1) consider(bounds.x1 - s.r - s.x, 0, 0);
+    if (s.z - s.r < bounds.z0) consider(0, 0, bounds.z0 + s.r - s.z);
+    if (s.z + s.r > bounds.z1) consider(0, 0, bounds.z1 - s.r - s.z);
+    for (const c of colliders) {
+      const qx = Math.max(c.x0, Math.min(s.x, c.x1));
+      const qy = Math.max(c.y0, Math.min(s.y, c.y1));
+      const qz = Math.max(c.z0, Math.min(s.z, c.z1));
+      const dx = s.x - qx;
+      const dy = s.y - qy;
+      const dz = s.z - qz;
+      const d = Math.hypot(dx, dy, dz);
+      if (d >= s.r) continue;
+      if (d > 1e-6) {
+        const k = (s.r - d) / d;
+        consider(dx * k, dy * k, dz * k);
+      } else {
+        // 球の中心が箱の中：いちばん近い面から外へ
+        const opts = [
+          [c.x0 - s.r - s.x, 0, 0], [c.x1 + s.r - s.x, 0, 0],
+          [0, c.y0 - s.r - s.y, 0], [0, c.y1 + s.r - s.y, 0],
+          [0, 0, c.z0 - s.r - s.z], [0, 0, c.z1 + s.r - s.z],
+        ];
+        opts.sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
+        consider(...opts[0]);
+      }
+    }
+  }
+  return best;
+}
+
 // 足元の床の高さ（step 以内の段差は乗れる）
 export function groundAt(colliders, x, z, footY, r, step) {
   let g = 0;
