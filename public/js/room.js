@@ -215,21 +215,21 @@ export function createRoom({ getUrls = () => [] } = {}) {
     if (list.length < MIN_PLAYERS) throw new Error(`${MIN_PLAYERS}にんいじょうであそべます`);
     const nSeek = clamp(settings.seekers, 1, list.length - 1);
 
+    // 鬼をやった回数が少ない人を優先してランダムに並べる
+    const byTurn = (arr) => arr
+      .map((p) => ({ p, k: p.seekerCount + Math.random() * 0.9 }))
+      .sort((a, b) => a.k - b.k)
+      .map((x) => x.p);
     let seekers;
-    const people = list.filter((p) => !p.cpu);
-    const cpus = list.filter((p) => p.cpu).sort(() => Math.random() - 0.5);
-    if (people.length === 1 && cpus.length && (role === 'seeker' || role === 'hider')) {
-      // CPU 戦：えらんだ役にする
+    const host = players.get(hostId);
+    if ((role === 'seeker' || role === 'hider') && host && list.includes(host)) {
+      // ホストがえらんだ役にする。ほかの人（CPU を含む）はランダム
+      const others = byTurn(list.filter((p) => p !== host));
       seekers = role === 'seeker'
-        ? new Set([people[0].id])
-        : new Set(cpus.slice(0, clamp(settings.seekers, 1, cpus.length)).map((p) => p.id));
+        ? new Set([host.id, ...others.slice(0, nSeek - 1).map((p) => p.id)])
+        : new Set(others.slice(0, clamp(nSeek, 1, others.length)).map((p) => p.id));
     } else {
-      // 鬼をやった回数が少ない人を優先してランダムに選ぶ
-      const order = list
-        .map((p) => ({ p, k: p.seekerCount + Math.random() * 0.9 }))
-        .sort((a, b) => a.k - b.k)
-        .map((x) => x.p);
-      seekers = new Set(order.slice(0, nSeek).map((p) => p.id));
+      seekers = new Set(byTurn(list).slice(0, nSeek).map((p) => p.id));
     }
 
     roundNo++;

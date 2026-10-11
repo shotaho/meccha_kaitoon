@@ -1490,8 +1490,10 @@ function isCpuMatch() {
   return isHost() && S.players.filter((p) => p.online && !p.cpu).length === 1;
 }
 
+// ホストは自分の役（おに／かくれる）をえらんでスタートする
 function roleChoiceCard() {
-  if (!isCpuMatch()) return null;
+  if (!isHost()) return null;
+  const cpuMatch = isCpuMatch();
   const big = 'flex:1;font-size:18px;padding:16px 8px';
   return h('div', { class: 'card' },
     h('h2', {}, S.phase === 'result' ? 'つぎはどっちであそぶ？' : 'どっちであそぶ？'),
@@ -1499,7 +1501,10 @@ function roleChoiceCard() {
       h('button', { class: 'danger', style: big, onclick: () => send({ t: 'start', role: 'seeker' }) }, '👹 おにになる'),
       h('button', { style: big, onclick: () => send({ t: 'start', role: 'hider' }) }, '🦎 かくれる'),
     ),
-    h('p', { class: 'muted' }, S.settings.cpus ? `CPU ${S.settings.cpus}にんとたいせん（したのせっていでかえられます）` : 'CPU 3にんとたいせんします'),
+    !cpuMatch && h('button', { class: 'sub', style: 'width:100%;margin-top:8px', onclick: () => send({ t: 'start' }) }, '🎲 おまかせ（みんなランダム）'),
+    h('p', { class: 'muted' }, cpuMatch
+      ? (S.settings.cpus ? `CPU ${S.settings.cpus}にんとたいせん（したのせっていでかえられます）` : 'CPU 3にんとたいせんします')
+      : 'あなた（ホスト）の役をえらんでスタート。ほかの人の役はランダムできまります'),
   );
 }
 
@@ -1514,7 +1519,6 @@ function settingsCard() {
     s.value = String(st[key]);
     return s;
   };
-  const n = S.players.filter((p) => p.online).length;
   return h('div', { class: 'card' },
     h('h2', {}, 'ルールせってい', !editable && h('span', { class: 'muted' }, '（ホストがへんこうできます）')),
     h('div', { class: 'settings' },
@@ -1528,8 +1532,7 @@ function settingsCard() {
       h('label', {}, 'はずれペナルティ'), sel('penaltySec', [0, 2, 3, 5, 10], (o) => (o ? `-${o}びょう` : 'なし')),
     ),
     !editable && h('p', { class: 'muted' }, 'ホストのスタートをまっています…'),
-    editable && !isCpuMatch() && h('button', { style: 'width:100%', disabled: n < 1, onclick: () => send({ t: 'start' }) }, S.phase === 'result' ? 'つぎのラウンドへ！' : 'ゲームスタート！'),
-    editable && isCpuMatch() && h('p', { class: 'muted' }, 'うえの「おにになる」「かくれる」でスタートします'),
+    editable && h('p', { class: 'muted' }, 'うえの「おにになる」「かくれる」でスタートします'),
   );
 }
 
