@@ -6,7 +6,7 @@ import { MAPS, spotView } from './maps.js';
 import { paintCamo } from './camo.js';
 import { createCpuBrains } from './cpu.js';
 import { Character, POSES, BODY_RADIUS } from './character.js';
-import { detectServer, connectServer, hostP2P, joinP2P, makeRoomCode, normalizeCode } from './net.js';
+import { detectServer, connectServer, hostP2P, joinP2P, localRoom, makeRoomCode, normalizeCode } from './net.js';
 
 // ===========================================================================
 // 小物
@@ -140,7 +140,9 @@ const sess = {
   set(k, v) { try { sessionStorage.setItem('mc.' + k, v); } catch {} },
   del(k) { try { sessionStorage.removeItem('mc.' + k); } catch {} },
 };
-const idKey = () => (netMode === 'p2p' ? `id.${roomCode}` : 'id');
+let offline = false; // CPU とだけ遊ぶ（通信なし）
+let quickStart = false; // 部屋ができたらすぐ CPU 戦を始める
+const idKey = () => (offline ? 'id.cpu' : netMode === 'p2p' ? `id.${roomCode}` : 'id');
 let S = null; // サーバーから来た状態
 let stateAt = 0;
 let joined = false;
@@ -213,10 +215,20 @@ function shareUrl(code) {
   return `${location.origin}${location.pathname}?${q}`;
 }
 
-// 接続を始める。p2p では mode = 'host' | 'join'
+// 接続を始める。mode = 'cpu'（CPU とすぐ遊ぶ）／ p2p では 'host' | 'join'
 function connect(mode, code, fresh = false) {
   link?.close();
-  if (netMode === 'server') {
+  offline = mode === 'cpu';
+  if (offline) {
+    hosting = true;
+    roomCode = null;
+    quickStart = true;
+    myId = store.get(idKey());
+    sess.set('room', 'cpu');
+    sess.set('hosting', '1');
+    history.replaceState(null, '', location.pathname + (new URLSearchParams(location.search).get('peerserver') ? `?peerserver=${encodeURIComponent(new URLSearchParams(location.search).get('peerserver'))}` : ''));
+    link = localRoom(callbacks);
+  } else if (netMode === 'server') {
     myId = store.get(idKey());
     link = connectServer(callbacks);
   } else {
@@ -239,6 +251,8 @@ function connect(mode, code, fresh = false) {
 function leaveRoom() {
   link?.close();
   link = null;
+  offline = false;
+  quickStart = false;
   joined = false;
   S = null;
   sess.del('room');
@@ -274,6 +288,17 @@ function onMessage(m) {
       S = m;
       stateAt = performance.now();
       ensureWorld(S.settings.map);
+      if (offline) {
+        // CPU 戦の設定は次回のために覚えておく
+        store.set('cpu.cpus', String(S.settings.cpus || 3));
+        store.set('cpu.level', S.settings.cpuLevel);
+        store.set('cpu.map', S.settings.map);
+        if (quickStart && S.phase === 'lobby') {
+          quickStart = false;
+          send({ t: 'settings', settings: { cpus: Number(store.get('cpu.cpus')) || 3, cpuLevel: store.get('cpu.level') || 'normal', map: store.get('cpu.map') || 'house' } });
+          send({ t: 'start' });
+        }
+      }
       if (prevPhase !== S.phase) onPhaseChange(prevPhase);
       else if (prevRole !== me()?.role) onPhaseChange(prevPhase);
       syncCharKinds();
@@ -1417,7 +1442,7 @@ function renderPanel() {
     out.push(...joinCards());
   } else if (!joined || !S) {
     out.push(h('div', { class: 'card' },
-      h('p', {}, netMode === 'p2p' ? (hosting ? `部屋「${roomCode}」を準備しています…` : `部屋「${roomCode}」に接続しています…`) : '接続中…'),
+      h('p', {}, offline ? 'CPU戦を準備しています…' : netMode === 'p2p' ? (hosting ? `部屋「${roomCode}」を準備しています…` : `部屋「${roomCode}」に接続しています…`) : '接続中…'),
       netMode === 'p2p' && h('button', { class: 'sub small', onclick: leaveRoom }, 'やめる'),
     ));
   } else if (S.phase === 'lobby') {
@@ -1477,10 +1502,14 @@ function joinCards() {
     h('h1', {}, 'めっちゃカイトオン'),
     h('p', { class: 'muted' }, '体に絵を描いて背景に溶け込む、お絵かきかくれんぼ。PC・スマホのブラウザで対戦！'),
   );
+  const cpuCard = h('div', { class: 'card' },
+    h('button', { style: 'width:100%;font-size:18px;padding:14px', onclick: () => takeName() && connect('cpu') }, '🤖 CPUとすぐ遊ぶ'),
+    h('p', { class: 'muted' }, '部屋を作らずに、このままCPUと対戦します（ステージやCPUの強さは結果画面で変えられます）'),
+  );
   if (netMode === 'server') {
     const go = () => takeName() && connect();
     nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && !e.isComposing && go());
-    return [title, h('div', { class: 'card' }, h('h2', {}, '参加する'), h('div', { class: 'row' }, nameInput, h('button', { onclick: go }, 'はじめる'))), rulesCard()];
+    return [title, cpuCard, h('div', { class: 'card' }, h('h2', {}, 'みんなで遊ぶ'), h('div', { class: 'row' }, nameInput, h('button', { onclick: go }, 'はじめる'))), rulesCard()];
   }
   const urlCode = normalizeCode(new URLSearchParams(location.search).get('room'));
   const codeInput = h('input', { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', placeholder: '部屋番号（4桁の数字）', maxlength: 4, value: urlCode, style: 'letter-spacing:.2em;font-weight:800' });
@@ -1503,12 +1532,18 @@ function joinCards() {
   return [
     title,
     h('div', { class: 'card' }, h('h2', {}, 'ニックネーム'), nameInput, h('p', { class: 'muted' }, '空のままなら自動で名前がつきます')),
-    ...(urlCode ? [joinCard, hostCard] : [hostCard, joinCard]),
+    ...(urlCode ? [joinCard, hostCard, cpuCard] : [cpuCard, hostCard, joinCard]),
     rulesCard(),
   ];
 }
 
 function inviteCard() {
+  if (offline) {
+    return h('div', { class: 'card' },
+      h('h2', {}, '🤖 CPUと対戦中'),
+      h('p', { class: 'muted' }, '下の設定でステージやCPUの人数・強さを変えて、「ゲーム開始！」を押してね。友だちと遊ぶときは「CPU戦をやめる」から部屋を作ってね'),
+    );
+  }
   if (netMode !== 'p2p') {
     return h('div', { class: 'card' },
       h('h2', {}, '友だちを呼ぼう'),
@@ -1541,7 +1576,8 @@ function inviteCard() {
 
 function nameRow() {
   return h('div', { class: 'row', style: 'margin-top:10px' },
-    netMode === 'p2p' && h('button', {
+    offline && h('button', { class: 'small sub', onclick: leaveRoom }, 'CPU戦をやめる'),
+    !offline && netMode === 'p2p' && h('button', {
       class: 'small sub',
       onclick: () => confirm(hosting ? '部屋を閉じますか？（全員の接続が切れます）' : '部屋を出ますか？') && leaveRoom(),
     }, hosting ? '部屋を閉じる' : '部屋を出る'),
@@ -1580,7 +1616,11 @@ requestAnimationFrame(step);
 (async () => {
   netMode = (await detectServer()) ? 'server' : 'p2p';
   const name = store.get('name');
-  if (netMode === 'server') {
+  if (sess.get('room') === 'cpu') {
+    // CPU 戦の途中で再読み込みした
+    if (!name) store.set('name', defaultName());
+    connect('cpu');
+  } else if (netMode === 'server') {
     if (store.get('id')) {
       if (!name) store.set('name', defaultName());
       connect();

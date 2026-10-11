@@ -117,6 +117,25 @@ function PeerCtor() {
 
 const RETRY_TYPES = new Set(['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected', 'webrtc']);
 
+// CPU とだけ遊ぶ部屋（通信なし・このブラウザの中だけで動く）
+export function localRoom(cb) {
+  const room = createRoom({ getUrls: () => [] });
+  const local = room.addConnection({
+    send: (s) => queueMicrotask(() => cb.onMessage(JSON.parse(s))),
+    close() {},
+  });
+  queueMicrotask(() => cb.onOpen());
+  return {
+    send(obj) {
+      const s = JSON.stringify(obj);
+      queueMicrotask(() => local.message(s));
+    },
+    close() {
+      room.destroy();
+    },
+  };
+}
+
 // 部屋を作る（このブラウザがホストになる）。fresh = 新しく作る部屋（番号が使用中なら cb.onIdTaken）
 export function hostP2P(code, shareUrl, cb, fresh = false) {
   const Peer = PeerCtor();

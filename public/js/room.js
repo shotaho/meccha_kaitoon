@@ -253,6 +253,9 @@ export function createRoom({ getUrls = () => [] } = {}) {
     }
     phase = 'prep';
     phaseEndsAt = Date.now() + settings.prepSec * 1000;
+    // 隠れる側が CPU だけなら、準備を待たずにすぐ始める
+    const humanHider = [...players.values()].some((p) => p.role === 'hider' && !p.cpu);
+    if (!solo && !humanHider) phaseEndsAt = Date.now() + 3000;
     broadcast({ t: 'round', roundNo });
     broadcast(transformsMsg(true));
     broadcastState();
