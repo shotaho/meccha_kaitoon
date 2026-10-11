@@ -166,6 +166,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
       online: !!p.conn || p.cpu,
       cpu: p.cpu,
       spot: p.spot,
+      ready: !!p.ready,
       role: p.role,
       found: p.found,
       foundBy: p.foundBy,
@@ -245,6 +246,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
       p.ops = [];
       p.lastShot = 0;
       p.spot = null;
+      p.ready = false;
       if (!p.conn && !p.cpu) {
         p.role = 'spectator';
       } else if (seekers.has(p.id)) {
@@ -431,6 +433,19 @@ export function createRoom({ getUrls = () => [] } = {}) {
           startRound(msg.role);
         } catch (e) {
           send(p, { t: 'toast', text: e.message });
+        }
+        return;
+      }
+      case 'ready': {
+        // 隠れる側の「かくれたよ！」。人間の隠れる側がみんな押したら捜索スタート
+        if (phase !== 'prep' || p.role !== 'hider' || p.cpu) return;
+        p.ready = msg.v !== false;
+        const waiting = [...players.values()].filter((q) => q.role === 'hider' && !q.cpu && q.conn && !q.ready);
+        if (!waiting.length) {
+          systemMsg('みんなかくれたよ！');
+          startHunt();
+        } else {
+          broadcastState();
         }
         return;
       }

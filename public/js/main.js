@@ -304,6 +304,7 @@ function onMessage(m) {
       syncCharKinds();
       renderPanel();
       renderHud();
+      if (viewMode === 'hider' && S.phase === 'prep') renderTools(); // 「かくれたよ」の表示を更新
       break;
     }
     case 'round':
@@ -1287,7 +1288,11 @@ function renderHud() {
   }
   const info = me();
   const left = S.players.filter((p) => p.role === 'hider' && !p.found).length;
-  $('phaseLabel').textContent = S.phase === 'prep' ? 'じゅんびタイム' : `さがしちゅう・のこり${left}にん`;
+  const people = S.players.filter((p) => p.role === 'hider' && !p.cpu && p.online);
+  const readyN = people.filter((p) => p.ready).length;
+  $('phaseLabel').textContent = S.phase === 'prep'
+    ? (people.length > 1 ? `じゅんびタイム（OK ${readyN}/${people.length}にん）` : 'じゅんびタイム')
+    : `さがしちゅう・のこり${left}にん`;
   const rl = $('roleLabel');
   if (info?.role === 'seeker') {
     rl.textContent = '👹 おに';
@@ -1377,6 +1382,15 @@ function renderTools() {
       h('button', { class: sel(hiderMode === 'paint'), onclick: () => pickMode('paint') }, '🎨 ペイント'),
     ),
   );
+  if (!frozen) {
+    // かくれ終わったら押す
+    const ready = !!me()?.ready;
+    parts.push(h('button', {
+      class: ready ? 'sub' : '',
+      style: 'width:100%;font-size:16px;padding:12px 6px',
+      onclick: () => send({ t: 'ready', v: !ready }),
+    }, ready ? '⏳ みんなをまっています（とりけす）' : '✅ かくれたよ！スタート'));
+  }
   if (hiderMode === 'move' && frozen) {
     parts.push(h('p', { class: 'muted' }, 'もううごけないけど、みつかるまではペイントでいろをぬりなおせるよ。おにのうごきをみながらなおそう！'));
   } else if (hiderMode === 'move') {
