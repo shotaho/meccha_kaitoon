@@ -307,9 +307,9 @@ function buildBurger(k) {
   box(3.7, 4, 0, 1, -6, -4.5, { ...outer, faces: { '-x': inner } }); // 受け渡し窓の下
   box(3.7, 4, 2.2, H, -6, -4.5, { ...outer, faces: { '-x': inner } }); // 受け渡し窓の上
   // 屋根
-  box(-14.3, 4.3, H, H + 0.6, -11.3, 1.3, { tex: 'yellowWall', tile: 1.5, faces: { '-y': { tex: 'ceiling', tile: 1.2 }, '+y': { tex: 'concrete', tile: 3 } } }, false);
+  box(-14.3, 4.3, H, H + 0.6, -11.3, 1.3, { tex: 'yellowWall', tile: 1.5, faces: { '-y': { tex: 'ceiling', tile: 1.2 }, '+y': { tex: 'concrete', tile: 3 } } });
   // 入口のひさし・窓
-  box(-6.6, -2.4, 2.8, 3.05, 1, 2.1, { tex: 'awning', tile: 0.6 }, false);
+  box(-6.6, -2.4, 2.8, 3.05, 1, 2.1, { tex: 'awning', tile: 0.6 });
   for (const x of [-11, -8.4, -0.4, 2.2]) plate(x, 1.9, 1.03, 2.2, 1.5, '+z', 'shopWindow');
   plate(-6.5, 3.6, 1.03, 3.4, 1.2, '+z', 'signBurger');
 
@@ -351,7 +351,7 @@ function buildBurger(k) {
   // 高さ制限バー
   box(4.6, 4.8, 0, 3, 9, 9.2, { tex: 'hazard', tile: 0.4 });
   box(9.5, 9.7, 0, 3, 9, 9.2, { tex: 'hazard', tile: 0.4 });
-  box(4.6, 9.7, 2.75, 3.0, 9, 9.2, { tex: 'hazard', tile: 0.4 }, false);
+  box(4.6, 9.7, 2.75, 3.0, 9, 9.2, { tex: 'hazard', tile: 0.4 });
 
   // 車
   function car(x, z, color, along = 'z') {
@@ -480,7 +480,7 @@ function buildSea(k) {
   box(4, 13, 0, 2.6, -10, -5, { tex: 'shipHull', tile: [4.5, 2.6], faces: { '+y': { tex: 'wood', tile: 1, color: '#6b4a2e' } } });
   box(9, 12, 2.6, 4.6, -9.5, -5.5, { tex: 'wood', tile: 1, color: '#7a5a3a' });
   cyl(6.5, -7.5, 0.2, 7, 2.6, { tex: 'wood', color: '#6b4a2e' });
-  box(5, 8, 6, 8.5, -7.6, -7.4, { color: '#d8cfb8' }, false); // やぶれた帆
+  box(5, 8, 6, 8.5, -7.6, -7.4, { color: '#d8cfb8' }); // やぶれた帆
   // 宝箱
   box(-2.6, -1.4, 0, 0.8, 1.6, 2.4, { tex: 'chest', stretch: true });
 
@@ -588,7 +588,7 @@ function buildCandy(k) {
 
   // ジンジャーブレッドの家
   box(-15, -7, 0, 4.5, -12, -6, { tex: 'gingerbread', tile: [4, 4.5] });
-  box(-15.4, -6.6, 4.5, 5.4, -12.4, -5.6, { tex: 'icing', tile: 2 }, false);
+  box(-15.4, -6.6, 4.5, 5.4, -12.4, -5.6, { tex: 'icing', tile: 2 });
   box(-12, -10, 0, 2.4, -5.98, -5.9, { color: '#6b3a1e' }, false); // ドア
 
   // ケーキのとう
