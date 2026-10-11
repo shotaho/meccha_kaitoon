@@ -258,7 +258,7 @@ export const MAPS = {
       { p: [4.36, 0, -1], yaw: E, pose: 'star' },
       { p: [-10, 0, 1.36], yaw: N, pose: 'stand' },
       { p: [0.5, 0, 1.36], yaw: N, pose: 'banzai' },
-      { p: [-5, 0, -11.36], yaw: S, pose: 'stand' },
+      { p: [-5, 0, -11.36], yaw: S, pose: 'stand', view: [-3, 1.5, -13.6] },
       { p: [9.66, 0.5, 4.5], yaw: W, pose: 'stand' },
       { p: [8.26, 0, -2], yaw: E, pose: 'crouch' },
       { p: [-6, 0, 12.66], yaw: S, pose: 'crouch' },
@@ -288,6 +288,92 @@ export const MAPS = {
   },
 };
 
+
+// うみのなか
+MAPS.sea = {
+  name: 'うみのなか',
+  outdoor: true,
+  sky: '#1d6fa3',
+  fog: { color: '#1d6fa3', near: 8, far: 42 },
+  bounds: { x0: -16, x1: 16, z0: -12, z1: 12, h: 10 },
+  seekerSpawn: [12, 0, 10],
+  seekerLook: PI / 4,
+  hiderSpawn: { c: [2, 3], rx: 2.5, rz: 1.5 },
+  spots: [
+    { p: [-12.68, 0, -7], yaw: E, pose: 'stand' },
+    { p: [-11.68, 0, 1], yaw: E, pose: 'star' },
+    { p: [-13.68, 0, 8], yaw: E, pose: 'stand' },
+    { p: [-5, 0, -7.68], yaw: N, pose: 'stand' },
+    { p: [1, 0, -7.68], yaw: N, pose: 'banzai' },
+    { p: [6, 0, -4.68], yaw: N, pose: 'stand' },
+    { p: [10.5, 0, -4.68], yaw: N, pose: 'star' },
+    { p: [3.68, 0, -7.5], yaw: W, pose: 'stand' },
+    { p: [13.68, 0, 4], yaw: W, pose: 'stand' },
+    { p: [13.68, 0, 8.5], yaw: W, pose: 'banzai' },
+    { p: [-2, 0, 2.72], yaw: N, pose: 'crouch' },
+    { p: [8.68, 2.6, -7.5], yaw: W, pose: 'stand' },
+    { p: [5, 0, 5], yaw: N, pose: 'lie', view: [5, 4.5, 8.5] },
+  ],
+  nav: [[-9, 0, -5], [-8, 0, 2.5], [-3, 0, -4], [-2, 0, -9], [0, 0, 0], [3, 0, 5], [8, 0, 0], [11, 0, -2.5],
+    [7, 0, 9], [-1, 0, 7.5], [-6, 0, 10.5], [-11, 0, -10], [2, 0, -11.3], [8, 0, -11.2], [-4, 0, 4]],
+};
+
+// くるまのなか（小さくなって車の中）
+MAPS.car = {
+  name: 'くるまのなか',
+  outdoor: false,
+  sky: '#c9dff0',
+  bounds: { x0: -10, x1: 10, z0: -14, z1: 14, h: 10 },
+  seekerSpawn: [9, 0, -1],
+  seekerLook: 1.86,
+  viewDist: 3.2, // 車の中はせまいので、近くから見て合わせる
+  hiderSpawn: { c: [0, 2.5], rx: 4, rz: 1 },
+  spots: [
+    { p: [-9.68, 0, -8.5], yaw: E, pose: 'stand' },
+    { p: [-9.68, 0, 2], yaw: E, pose: 'star' },
+    { p: [9.68, 0, -8.5], yaw: W, pose: 'stand' },
+    { p: [9.68, 0, 3], yaw: W, pose: 'banzai' },
+    { p: [-7.5, 0, -9.68], yaw: N, pose: 'stand', view: [-9.2, 1.6, -6.5] },
+    { p: [7.5, 0, -9.68], yaw: N, pose: 'star', view: [9.2, 1.6, -6.5] },
+    { p: [-5, 0, -0.18], yaw: N, pose: 'stand' },
+    { p: [5, 0, -0.18], yaw: N, pose: 'banzai' },
+    { p: [-5, 0, -7.32], yaw: S, pose: 'crouch', view: [-9.2, 1.6, -8.6] },
+    { p: [-5, 0, 4.68], yaw: S, pose: 'crouch' },
+    { p: [4, 0, 4.68], yaw: S, pose: 'crouch' },
+    { p: [-2, 2.5, 9.68], yaw: S, pose: 'stand' },
+    { p: [7, 2.5, 9.68], yaw: S, pose: 'star' },
+  ],
+  nav: [[-9, 0, -8.5], [-5, 0, -8.5], [5, 0, -8.5], [9, 0, -8.5], [-9, 0, -1], [9, 0, -1], [0, 0, 1], [-6, 0, 2.5],
+    [6, 0, 2.5], [0, 0, 3.0], [-9, 0, 4], [9, 0, 4]],
+};
+
+// おかしのまち
+MAPS.candy = {
+  name: 'おかしのまち',
+  outdoor: true,
+  sky: '#ffd6ec',
+  bounds: { x0: -18, x1: 18, z0: -14, z1: 14, h: 12 },
+  seekerSpawn: [16, 0, 12],
+  seekerLook: PI / 4,
+  hiderSpawn: { c: [0, 3], rx: 3, rz: 1.2 },
+  spots: [
+    { p: [-13, 0, -5.68], yaw: N, pose: 'stand' },
+    { p: [-8.5, 0, -5.68], yaw: N, pose: 'star' },
+    { p: [-6.68, 0, -9], yaw: E, pose: 'stand' },
+    { p: [-1, 0, 6.68], yaw: S, pose: 'stand' },
+    { p: [4, 0, 6.68], yaw: S, pose: 'banzai' },
+    { p: [1, 0, 8.52], yaw: N, pose: 'star' },
+    { p: [8.68, 0, 10], yaw: W, pose: 'stand' },
+    { p: [12, 0, 4.68], yaw: S, pose: 'stand' },
+    { p: [-12, 0, 12.68], yaw: S, pose: 'crouch' },
+    { p: [9, 0, -3.5], yaw: N, pose: 'stand' },
+    { p: [-11, 0, -0.68], yaw: N, pose: 'crouch' },
+    { p: [0, 0, 2], yaw: N, pose: 'lie', view: [0, 4.5, 5.5] },
+  ],
+  nav: [[-9, 0, -3.5], [-4, 0, 0], [2, 0, -3], [6, 0, 1], [13, 0, -3], [14, 0, 2.5], [4, 0, 11], [-8, 0, 11],
+    [-14, 0, 2], [-3, 0, -9], [4, 0, -12.5], [14, 0, -12], [-16.5, 0, -4], [0, 0, 10.5], [10, 0, 1], [-5, 0, -13]],
+};
+
 export const MAP_IDS = Object.keys(MAPS);
 
 // 地面の高さ（ブロックの世界以外は 0）
@@ -297,9 +383,9 @@ export function groundY(mapId, x, z) {
 }
 
 // 擬態を合わせる視点
-export function spotView(s) {
+export function spotView(s, dist = 5) {
   if (s.view) return s.view;
   const fx = Math.sin(s.yaw);
   const fz = Math.cos(s.yaw);
-  return [s.p[0] + fx * 5, s.p[1] + 1.5, s.p[2] + fz * 5];
+  return [s.p[0] + fx * dist, s.p[1] + 1.5, s.p[2] + fz * dist];
 }

@@ -145,6 +145,11 @@ export function createCpuBrains(ctx) {
       }
       b.vy -= 13 * dt;
       b.pos.y += b.vy * dt;
+      const g0 = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
+      if (b.pos.y <= g0 && b.vy <= 0) {
+        b.pos.y = g0;
+        b.vy = 0;
+      }
       collide(world.colliders, b.pos, R, H, world.bounds);
       const g = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
       if (b.pos.y <= g) {

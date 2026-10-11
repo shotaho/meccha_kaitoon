@@ -1142,6 +1142,12 @@ function updateSeeker(dt) {
   if (held.has('jump')) jump();
   self.vy -= 13 * dt;
   self.pos.y += self.vy * dt;
+  // 先に着地を判定する（ジャンプで台の上に乗れるように）
+  const g0 = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.4);
+  if (self.pos.y <= g0 && self.vy <= 0) {
+    self.pos.y = g0;
+    self.vy = 0;
+  }
   collide(world.colliders, self.pos, BODY_RADIUS, 1.7, world.bounds);
   const g = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.4);
   if (self.pos.y <= g) {
@@ -1187,7 +1193,7 @@ function updateCamo() {
     const spot = MAPS[S.settings.map].spots[info.spot];
     if (!spot) continue;
     c.snap();
-    paintCamo(renderer, scene, c, spotView(spot), S.settings.cpuLevel, (hidden) => {
+    paintCamo(renderer, scene, c, spotView(spot, MAPS[S.settings.map].viewDist), S.settings.cpuLevel, (hidden) => {
       if (hidden) {
         for (const o of chars.values()) o.root.visible = false;
         for (const sp of splats) sp.m.visible = false;

@@ -101,13 +101,40 @@ export function buildWorld(scene, mapId) {
     group.add(sun);
   }
 
-  const kit = { group, box, plate, plant, add, mat, lights, colliders, meshes, bounds };
-  if (mapId === 'burger') buildBurger(kit);
-  else if (mapId === 'blocks') buildBlocks(kit);
-  else buildHouse(kit);
+  // 円柱（当たり判定は内接する四角）
+  function cyl(x, z, r, h, y0, spec = {}, collide = true, segs = 24) {
+    const m = add(new THREE.Mesh(new THREE.CylinderGeometry(spec.rTop ?? r, r, h, segs), mat(spec.tex, spec.rx || 2, spec.ry || 1, spec.color)), x, y0 + h / 2, z);
+    if (collide) {
+      const q = r * 0.75;
+      colliders.push({ x0: x - q, x1: x + q, y0, y1: y0 + h, z0: z - q, z1: z + q });
+    }
+    return m;
+  }
 
-  const background = new THREE.Color(def.outdoor ? '#9fd3f5' : '#222222');
-  scene.background = background;
+  // 球（sy で上下につぶす）
+  function sphere(x, y, z, r, spec = {}, collide = true, sy = 1) {
+    const m = add(new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), mat(spec.tex, spec.rx || 2, spec.ry || 1, spec.color)), x, y, z);
+    m.scale.y = sy;
+    if (collide) {
+      const q = r * 0.75;
+      colliders.push({ x0: x - q, x1: x + q, y0: y - r * sy * 0.8, y1: y + r * sy * 0.8, z0: z - q, z1: z + q });
+    }
+    return m;
+  }
+
+  // 当たり判定もレイキャストもしない飾り
+  function deco(mesh, x, y, z) {
+    mesh.position.set(x, y, z);
+    group.add(mesh);
+    return mesh;
+  }
+
+  const kit = { group, box, plate, plant, add, cyl, sphere, deco, mat, lights, colliders, meshes, bounds };
+  const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy };
+  (builders[mapId] || buildHouse)(kit);
+
+  scene.background = new THREE.Color(def.sky || (def.outdoor ? '#9fd3f5' : '#222222'));
+  scene.fog = def.fog ? new THREE.Fog(def.fog.color, def.fog.near, def.fog.far) : null;
 
   return {
     id: MAPS[mapId] ? mapId : 'house',
@@ -117,6 +144,7 @@ export function buildWorld(scene, mapId) {
     bounds,
     dispose() {
       group.removeFromParent();
+      scene.fog = null;
       group.traverse((o) => {
         if (o.geometry) o.geometry.dispose();
         const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
@@ -420,6 +448,198 @@ function buildBlocks(k) {
   k.group.add(ground);
 
   k.lights('#e6f4ff', '#7a8a5a', 1.5, 1.9);
+}
+
+// ---------------------------------------------------------------------------
+// うみのなか（海底・岩・しずんだ船・サンゴ・海そう）
+// ---------------------------------------------------------------------------
+
+function buildSea(k) {
+  const { box, cyl, sphere, deco, plate, mat } = k;
+  const { x0: X0, x1: X1, z0: Z0, z1: Z1 } = k.bounds;
+  const T = 0.5;
+  box(X0 - T, X1 + T, -T, 0, Z0 - T, Z1 + T, { tex: 'seaSand', tile: 4 }, false);
+
+  // 西の岩がけ
+  const rock = { tex: 'rock', tile: 3 };
+  box(-16, -13, 0, 4, -12, -2, rock);
+  box(-16, -12, 0, 2.5, -2, 4, rock);
+  box(-16, -14, 0, 3.5, 4, 12, rock);
+  // 岩のアーチ
+  box(-6, -4, 0, 3.5, -10, -8, rock);
+  box(0, 2, 0, 3.5, -10, -8, rock);
+  box(-6, 2, 3.5, 4.6, -10, -8, rock);
+  // ごろごろした岩
+  for (const [x, z, r] of [[-8, 0, 1.1], [6, 3, 0.9], [-1, 10, 1.2], [12, -12, 1.4]]) {
+    const m = k.add(new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), mat('rock', 1, 1)), x, r * 0.6, z);
+    m.rotation.set(x, z, 0);
+    k.colliders.push({ x0: x - r * 0.7, x1: x + r * 0.7, y0: 0, y1: r * 1.3, z0: z - r * 0.7, z1: z + r * 0.7 });
+  }
+
+  // しずんだ船
+  box(4, 13, 0, 2.6, -10, -5, { tex: 'shipHull', tile: [4.5, 2.6], faces: { '+y': { tex: 'wood', tile: 1, color: '#6b4a2e' } } });
+  box(9, 12, 2.6, 4.6, -9.5, -5.5, { tex: 'wood', tile: 1, color: '#7a5a3a' });
+  cyl(6.5, -7.5, 0.2, 7, 2.6, { tex: 'wood', color: '#6b4a2e' });
+  box(5, 8, 6, 8.5, -7.6, -7.4, { color: '#d8cfb8' }, false); // やぶれた帆
+  // 宝箱
+  box(-2.6, -1.4, 0, 0.8, 1.6, 2.4, { tex: 'chest', stretch: true });
+
+  // サンゴのかべとサンゴ
+  box(14, 16, 0, 2.5, -2, 12, { tex: 'coralWall', tile: 2 });
+  const coralCols = ['#ff7f6b', '#f7c66b', '#c76bd6', '#ff9fb2', '#6bd6c6'];
+  let ci = 0;
+  for (const [x, z] of [[11, 1], [12, 3.5], [10.5, 6], [12, 9], [9.5, 10.5]]) {
+    const col = coralCols[ci++ % coralCols.length];
+    cyl(x, z, 0.35, 1.6, 0, { color: col, rTop: 0.15 }, true, 10);
+    cyl(x + 0.5, z + 0.3, 0.25, 1.1, 0, { color: col, rTop: 0.1 }, false, 10);
+    sphere(x - 0.5, 0.45, z - 0.2, 0.5, { color: coralCols[ci % coralCols.length] }, true, 0.9);
+  }
+  for (const [x, z] of [[-9, -6], [3, 7], [-5, 1]]) sphere(x, 0.5, z, 0.7, { tex: 'coralWall', color: '#ffd0c8' }, true, 0.8);
+
+  // 海そうの森
+  for (let i = 0; i < 14; i++) {
+    const x = -10 + (i % 7) * 1.1 + ((i * 37) % 5) * 0.1;
+    const z = 6 + Math.floor(i / 7) * 2.4 + ((i * 13) % 7) * 0.15;
+    const hgt = 3 + ((i * 7) % 5) * 0.4;
+    const m = k.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, hgt, 0.12), mat('kelp', 1, 1)), x, hgt / 2, z);
+    m.rotation.y = i * 0.7;
+    k.colliders.push({ x0: x - 0.2, x1: x + 0.2, y0: 0, y1: hgt, z0: z - 0.2, z1: z + 0.2 });
+  }
+  // ヒトデ
+  for (const [x, z, col] of [[2, -2, '#ff8a3d'], [-6, -4, '#ff5c8a'], [8, 6, '#ffd166']]) {
+    const st = deco(new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.05, 5), new THREE.MeshLambertMaterial({ color: col })), x, 0.03, z);
+    st.rotation.y = x;
+  }
+  // あわ
+  const bubbleMat = new THREE.MeshBasicMaterial({ color: '#e6f8ff', transparent: true, opacity: 0.45 });
+  for (let i = 0; i < 40; i++) {
+    const x = ((i * 53) % 30) - 15;
+    const z = ((i * 29) % 22) - 11;
+    deco(new THREE.Mesh(new THREE.SphereGeometry(0.06 + (i % 4) * 0.04, 8, 6), bubbleMat), x, 1 + ((i * 17) % 80) / 10, z);
+  }
+  k.lights('#9fe0ff', '#2a6f86', 1.7, 1.5);
+}
+
+// ---------------------------------------------------------------------------
+// くるまのなか（小さくなって車の中に入った）
+// ---------------------------------------------------------------------------
+
+function buildCar(k) {
+  const { box, cyl, sphere, plate, add, mat } = k;
+  const { x0: X0, x1: X1, z0: Z0, z1: Z1, h: H } = k.bounds;
+  const T = 0.5;
+  box(X0 - T, X1 + T, -T, 0, Z0 - T, Z1 + T, { tex: 'carpet', tile: 2 }, false);
+  box(X0 - T, X1 + T, H, H + T, Z0 - T, Z1 + T, { tex: 'headliner', tile: 2 }, false);
+  // ドア（左右）と窓
+  box(X0 - T, X0, 0, H, Z0, Z1, { tex: 'doorPanel', tile: [7, 4.5], faces: { '+x': { tex: 'doorPanel', tile: [7, 4.5] } } });
+  box(X1, X1 + T, 0, H, Z0, Z1, { tex: 'doorPanel', tile: [7, 4.5] });
+  for (const z of [-6, 4]) {
+    plate(X0 + 0.03, 6.4, z, 7, 3, '+x', 'carWindow');
+    plate(X1 - 0.03, 6.4, z, 7, 3, '-x', 'carWindow');
+  }
+  // 後ろのかべとリアガラス
+  box(X0 - T, X1 + T, 0, H, Z1, Z1 + T, { tex: 'headliner', tile: 2 });
+  plate(0, 7.2, Z1 - 0.03, 12, 2.8, '-z', 'carWindow');
+  // ダッシュボードとフロントガラス
+  box(X0, X1, 0, 5, Z0 - T, -10, { tex: 'console', tile: 2, faces: { '+z': { tex: 'dashboard', stretch: true }, '+y': { color: '#2a2c30' } } });
+  box(X0 - T, X1 + T, 5, H, Z0 - T, Z0, { tex: 'headliner', tile: 2 }, false);
+  plate(0, 7, Z0 + 0.03, 18, 3.4, '+z', 'carWindow');
+  // ハンドル
+  const wheel = add(new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.28, 12, 32), mat(null, 1, 1, '#1d1e21')), -5, 5.6, -9.2);
+  wheel.rotation.x = -0.35;
+  cyl(-5, -9.6, 0.3, 1.2, 4.6, { color: '#1d1e21' }, false);
+  // 前の座席（左右）
+  const seat = { tex: 'seatFabric', tile: 1.5 };
+  for (const sx of [-5, 5]) {
+    box(sx - 3, sx + 3, 0, 2.5, -7, -2, seat);
+    box(sx - 3, sx + 3, 2.5, 7.5, -2, -0.5, seat);
+    box(sx - 1.4, sx + 1.4, 7.5, 9, -1.8, -0.7, seat); // ヘッドレスト
+  }
+  // まんなかのコンソールとシフトレバー
+  box(-1.5, 1.5, 0, 2.2, -10, -2, { tex: 'console', tile: [3, 2.2] });
+  cyl(0, -6, 0.15, 1.2, 2.2, { color: '#888c92' }, false);
+  sphere(0, 3.5, -6, 0.45, { color: '#1d1e21' }, false);
+  // うしろの座席
+  box(-9, 9, 0, 2.5, 5, 10, seat);
+  box(-9, 9, 2.5, 7.5, 10, 11.5, seat);
+  // おもちゃばこ（うしろの座席にのぼる台）
+  box(-1.2, 1.2, 0, 1.2, 3.7, 5, { tex: 'icing', tile: 1, color: '#ffd166' });
+  // 落とし物いろいろ
+  box(-7.5, -5, 2.5, 3.7, 7.6, 9, { tex: 'tissueBox', tile: [2.5, 1.2], faces: { '+y': { color: '#9fd6c8' } } });
+  cyl(5.5, 7, 0.55, 2.6, 2.5, { color: '#7fd0ff', rTop: 0.4 });
+  cyl(5.5, 7, 0.25, 0.4, 5.1, { color: '#ffffff' }, false);
+  box(6.2, 8.4, 0, 0.35, 0.3, 1.4, { color: '#f2c94c' }); // まんが本
+  box(1, 3.5, 2.5, 4, 6, 7.5, { color: '#e4572e' }); // おかしのふくろ
+  k.lights('#fff5e6', '#5b5f66', 1.5, 1.2);
+}
+
+// ---------------------------------------------------------------------------
+// おかしのまち
+// ---------------------------------------------------------------------------
+
+function buildCandy(k) {
+  const { box, cyl, sphere, deco, mat, add } = k;
+  const { x0: X0, x1: X1, z0: Z0, z1: Z1 } = k.bounds;
+  const T = 0.5;
+  box(X0 - T, X1 + T, -T, 0, Z0 - T, Z1 + T, { tex: 'candyGround', tile: 5 }, false);
+  // クッキーの道
+  box(-1.5, 1.5, 0, 0.02, -4, 13, { tex: 'cookie', tile: 1.5 }, false);
+  box(-7, -1.5, 0, 0.02, -5, -2, { tex: 'cookie', tile: 1.5 }, false);
+
+  // ジンジャーブレッドの家
+  box(-15, -7, 0, 4.5, -12, -6, { tex: 'gingerbread', tile: [4, 4.5] });
+  box(-15.4, -6.6, 4.5, 5.4, -12.4, -5.6, { tex: 'icing', tile: 2 }, false);
+  box(-12, -10, 0, 2.4, -5.98, -5.9, { color: '#6b3a1e' }, false); // ドア
+
+  // ケーキのとう
+  cyl(9, -7, 3.2, 2.6, 0, { tex: 'cakeLayer', rx: 3 }, true, 40);
+  cyl(9, -7, 2.2, 2.2, 2.6, { tex: 'cakeLayer', rx: 2 }, true, 40);
+  sphere(9, 5.4, -7, 0.6, { color: '#d61f3c' }, true);
+
+  // チョコのかべ
+  box(-4, 6, 0, 2.6, 7, 8.2, { tex: 'chocolate', tile: 1.3 });
+
+  // アイス屋さん
+  box(9, 15, 0, 3.5, 5, 11, { tex: 'waffle', tile: 1.2 });
+  for (const [x, z, col] of [[10.5, 6.5, '#ffb3c8'], [13.5, 6.5, '#fff4e6'], [12, 9.5, '#9fd6c8']]) sphere(x, 4.2, z, 1.1, { color: col }, true, 0.8);
+
+  // クッキーのへい
+  box(-18, -6, 0, 1.2, 13, 14, { tex: 'cookie', tile: 1.2 });
+
+  // ドーナツ
+  const donut = add(new THREE.Mesh(new THREE.TorusGeometry(2, 0.7, 16, 40), mat(null, 1, 1, '#e8a25e')), -2, 2.7, -6);
+  const glaze = add(new THREE.Mesh(new THREE.TorusGeometry(2, 0.72, 16, 40, Math.PI), mat(null, 1, 1, '#ff8fb8')), -2, 2.7, -6);
+  glaze.position.z = -5.99;
+  void donut;
+  k.colliders.push({ x0: -4.7, x1: -3.3, y0: 0, y1: 4.5, z0: -6.7, z1: -5.3 });
+  k.colliders.push({ x0: -0.7, x1: 0.7, y0: 0, y1: 4.5, z0: -6.7, z1: -5.3 });
+  k.colliders.push({ x0: -4, x1: 0, y0: 4.3, y1: 5.4, z0: -6.7, z1: -5.3 });
+
+  // ペロペロキャンディの木
+  for (const [x, z] of [[-12, 3], [-14, 9], [3, -11], [14, -1], [6, 11.5]]) {
+    cyl(x, z, 0.12, 3, 0, { color: '#ffffff' }, false, 8);
+    k.colliders.push({ x0: x - 0.2, x1: x + 0.2, y0: 0, y1: 3, z0: z - 0.2, z1: z + 0.2 });
+    const disc = add(new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.25, 32), mat('lollipop', 1, 1)), x, 3.9, z);
+    disc.rotation.x = Math.PI / 2;
+    k.colliders.push({ x0: x - 1.2, x1: x + 1.2, y0: 2.7, y1: 5.1, z0: z - 0.15, z1: z + 0.15 });
+  }
+  // キャンディケーン
+  for (const [x, z] of [[4, -2], [-9, 6], [16, 2]]) {
+    cyl(x, z, 0.3, 3.2, 0, { tex: 'candy', rx: 1, ry: 3 }, true, 16);
+    sphere(x, 3.25, z, 0.3, { color: '#e63946' }, false);
+  }
+  // グミ
+  const gumCols = ['#ff6f91', '#7bd389', '#ffd166', '#6ec6ff', '#c792ea'];
+  [[-7, 4], [7, 2], [-4, 11], [12, -12], [-16, -2]].forEach(([x, z], i) => sphere(x, 0.45, z, 0.9, { tex: 'sugar', color: gumCols[i % gumCols.length] }, true, 0.75));
+  // マカロン
+  ['#ffb3c8', '#fff4e6', '#c792ea', '#fff4e6', '#7bd389'].forEach((col, i) => cyl(-11, -2, 1, i % 2 ? 0.2 : 0.4, [0, 0.4, 0.6, 1.0, 1.2][i], { color: col }, false, 28));
+  k.colliders.push({ x0: -11.8, x1: -10.2, y0: 0, y1: 1.6, z0: -2.8, z1: -1.2 });
+  // スプリンクル（飾り）
+  for (let i = 0; i < 30; i++) {
+    const m = deco(new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.25, 2, 6), new THREE.MeshLambertMaterial({ color: gumCols[i % 5] })), ((i * 41) % 32) - 16, 0.08, ((i * 23) % 24) - 12);
+    m.rotation.set(Math.PI / 2, 0, i);
+  }
+  k.lights('#fff0f8', '#c7a7c0', 1.7, 1.6);
 }
 
 // ---------------------------------------------------------------------------

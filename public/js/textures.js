@@ -991,6 +991,432 @@ const GEN = {
     for (let i = 0; i < 64; i += 8) g.fillRect(i, 0, 3, 64);
     return c;
   },
+
+  // ===== うみのなか =====
+
+  seaSand() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(201);
+    g.fillStyle = '#d9c48f';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2500; i++) {
+      const v = r();
+      g.fillStyle = v < 0.5 ? 'rgba(160,130,80,.35)' : 'rgba(255,245,210,.35)';
+      g.fillRect(r() * 256, r() * 256, 2, 2);
+    }
+    g.strokeStyle = 'rgba(150,120,70,.35)';
+    g.lineWidth = 3;
+    for (let y = 10; y < 256; y += 28) {
+      g.beginPath();
+      for (let x = 0; x <= 256; x += 8) g.lineTo(x, y + Math.sin(x / 18) * 5);
+      g.stroke();
+    }
+    return c;
+  },
+
+  rock() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(202);
+    g.fillStyle = '#5f6b72';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 70; i++) {
+      g.fillStyle = hsl(195 + r() * 20, 8 + r() * 10, 30 + r() * 25);
+      g.beginPath();
+      g.ellipse(r() * 256, r() * 256, 10 + r() * 30, 8 + r() * 20, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (let i = 0; i < 25; i++) {
+      g.fillStyle = hsl(100 + r() * 60, 40, 30 + r() * 15);
+      g.beginPath();
+      g.arc(r() * 256, r() * 256, 3 + r() * 6, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  coralWall() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(203);
+    g.fillStyle = '#e8746a';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 160; i++) {
+      g.fillStyle = ['#f29e8e', '#c94f5c', '#f7c66b', '#b65fa8', '#ff8f6b'][Math.floor(r() * 5)];
+      g.beginPath();
+      g.arc(r() * 256, r() * 256, 5 + r() * 12, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = 'rgba(80,20,30,.35)';
+      g.beginPath();
+      g.arc(r() * 256, r() * 256, 2, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  kelp() {
+    const [c, g] = canvas(64, 256);
+    g.fillStyle = '#2f7d3a';
+    g.fillRect(0, 0, 64, 256);
+    g.fillStyle = '#4fa34a';
+    for (let y = 0; y < 256; y += 32) {
+      g.beginPath();
+      g.ellipse(32, y + 16, 26, 12, 0.4, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#1f5a28';
+    g.fillRect(29, 0, 6, 256);
+    return c;
+  },
+
+  shipHull() {
+    const [c, g] = canvas(256, 128);
+    const r = rng(204);
+    for (let i = 0; i < 8; i++) {
+      g.fillStyle = hsl(25, 30 + r() * 10, 18 + r() * 8);
+      g.fillRect(0, i * 16, 256, 16);
+      g.fillStyle = 'rgba(0,0,0,.4)';
+      g.fillRect(0, i * 16 + 14, 256, 2);
+    }
+    g.fillStyle = 'rgba(80,140,110,.35)';
+    for (let i = 0; i < 40; i++) g.fillRect(r() * 256, 80 + r() * 48, 6 + r() * 10, 3);
+    for (const x of [40, 128, 216]) {
+      g.fillStyle = '#c9a227';
+      g.beginPath();
+      g.arc(x, 40, 16, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#16323a';
+      g.beginPath();
+      g.arc(x, 40, 11, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  chest() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#7a4a22';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#d4a52a';
+    g.fillRect(0, 0, 128, 10);
+    g.fillRect(0, 118, 128, 10);
+    g.fillRect(0, 0, 10, 128);
+    g.fillRect(118, 0, 10, 128);
+    g.fillRect(0, 50, 128, 8);
+    g.fillRect(54, 44, 20, 26);
+    g.fillStyle = '#3a2410';
+    g.fillRect(61, 54, 6, 10);
+    return c;
+  },
+
+  // ===== くるまのなか =====
+
+  carpet() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(301);
+    g.fillStyle = '#3b3d42';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 2500; i++) {
+      const v = 40 + Math.floor(r() * 40);
+      g.fillStyle = `rgb(${v},${v},${v + 5})`;
+      g.fillRect(r() * 128, r() * 128, 1, 2);
+    }
+    return c;
+  },
+
+  doorPanel() {
+    const [c, g] = canvas(256, 256);
+    g.fillStyle = '#5b5f66';
+    g.fillRect(0, 0, 256, 256);
+    g.fillStyle = '#7b8088';
+    g.fillRect(0, 0, 256, 40);
+    g.fillStyle = '#44474d';
+    g.fillRect(20, 110, 216, 26);
+    g.fillStyle = '#2f3236';
+    g.fillRect(30, 170, 140, 50);
+    g.fillStyle = '#9aa0a8';
+    g.fillRect(190, 90, 34, 12);
+    g.fillStyle = 'rgba(0,0,0,.25)';
+    for (let x = 36; x < 160; x += 10) g.fillRect(x, 180, 4, 30);
+    return c;
+  },
+
+  headliner() {
+    const [c, g] = canvas(64, 64);
+    const r = rng(302);
+    g.fillStyle = '#d9d2c3';
+    g.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 300; i++) {
+      g.fillStyle = 'rgba(120,110,90,.15)';
+      g.fillRect(r() * 64, r() * 64, 1, 1);
+    }
+    return c;
+  },
+
+  dashboard() {
+    const [c, g] = canvas(512, 160);
+    g.fillStyle = '#2a2c30';
+    g.fillRect(0, 0, 512, 160);
+    // メーター
+    for (const [x, col] of [[110, '#ff7a3a'], [200, '#4fd0ff']]) {
+      g.fillStyle = '#111';
+      g.beginPath();
+      g.arc(x, 70, 40, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = '#ddd';
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(x, 70, 34, Math.PI * 0.8, Math.PI * 2.2);
+      g.stroke();
+      g.strokeStyle = col;
+      g.beginPath();
+      g.moveTo(x, 70);
+      g.lineTo(x + 22, 52);
+      g.stroke();
+    }
+    // 画面とエアコン
+    g.fillStyle = '#1b6fa8';
+    g.fillRect(270, 30, 110, 70);
+    g.fillStyle = '#9fd3ff';
+    g.fillRect(280, 40, 50, 6);
+    g.fillRect(280, 54, 80, 6);
+    g.fillStyle = '#4a4d52';
+    for (const x of [400, 450]) {
+      g.fillRect(x, 40, 40, 40);
+      g.fillStyle = '#2a2c30';
+      for (let y = 46; y < 80; y += 8) g.fillRect(x + 4, y, 32, 3);
+      g.fillStyle = '#4a4d52';
+    }
+    g.fillStyle = '#555';
+    for (let i = 0; i < 6; i++) g.fillRect(280 + i * 18, 115, 12, 12);
+    return c;
+  },
+
+  seatFabric() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#3f4a63';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = 'rgba(255,255,255,.07)';
+    for (let i = 0; i < 128; i += 4) g.fillRect(i, 0, 2, 128);
+    g.fillStyle = 'rgba(0,0,0,.3)';
+    g.fillRect(0, 0, 128, 4);
+    g.fillRect(0, 62, 128, 4);
+    return c;
+  },
+
+  carWindow() {
+    const [c, g] = canvas(256, 128);
+    const grd = g.createLinearGradient(0, 0, 0, 128);
+    grd.addColorStop(0, '#9fd6ff');
+    grd.addColorStop(0.6, '#e6f5ff');
+    grd.addColorStop(0.6, '#6aa84f');
+    grd.addColorStop(1, '#4b7b38');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 256, 128);
+    g.fillStyle = '#5a8f3c';
+    for (const [x, s] of [[30, 1], [90, 0.7], [170, 1.2], [230, 0.8]]) {
+      g.beginPath();
+      g.arc(x, 74 - 14 * s, 14 * s, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.strokeStyle = '#2b2b2b';
+    g.lineWidth = 10;
+    g.strokeRect(0, 0, 256, 128);
+    return c;
+  },
+
+  console() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#2f3236';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#1b1c1f';
+    for (const x of [30, 90]) {
+      g.beginPath();
+      g.arc(x, 40, 20, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#44474d';
+    g.fillRect(14, 80, 100, 30);
+    return c;
+  },
+
+  tissueBox() {
+    const [c, g] = canvas(128, 64);
+    g.fillStyle = '#9fd6c8';
+    g.fillRect(0, 0, 128, 64);
+    g.fillStyle = '#ffffff';
+    for (let i = 0; i < 6; i++) {
+      g.beginPath();
+      g.arc(10 + i * 22, 50, 8, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#f7a8c4';
+    g.fillRect(0, 0, 128, 8);
+    return c;
+  },
+
+  // ===== おかしのまち =====
+
+  candyGround() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(401);
+    g.fillStyle = '#bdf0d6';
+    g.fillRect(0, 0, 256, 256);
+    const cols = ['#ff6f91', '#ffd166', '#6ec6ff', '#c792ea', '#ffffff', '#ff9f43'];
+    for (let i = 0; i < 260; i++) {
+      g.save();
+      g.translate(r() * 256, r() * 256);
+      g.rotate(r() * Math.PI);
+      g.fillStyle = cols[Math.floor(r() * cols.length)];
+      g.fillRect(-5, -1.5, 10, 3);
+      g.restore();
+    }
+    return c;
+  },
+
+  cookie() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(402);
+    g.fillStyle = '#d9a25e';
+    g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = '#b97f3e';
+    g.lineWidth = 3;
+    g.strokeRect(4, 4, 120, 120);
+    g.fillStyle = '#b97f3e';
+    for (let y = 20; y < 128; y += 30) for (let x = 20; x < 128; x += 30) {
+      g.beginPath();
+      g.arc(x + (r() - 0.5) * 6, y + (r() - 0.5) * 6, 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  gingerbread() {
+    const [c, g] = canvas(256, 256);
+    g.fillStyle = '#a8662c';
+    g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 6;
+    g.lineCap = 'round';
+    g.beginPath();
+    for (let x = 0; x <= 256; x += 32) {
+      g.moveTo(x, 24);
+      g.quadraticCurveTo(x + 16, 44, x + 32, 24);
+    }
+    g.stroke();
+    // 窓（キャンディのステンドグラス）
+    for (const x of [48, 160]) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(x - 6, 86, 60, 72);
+      const cols = ['#ff6f91', '#ffd166', '#6ec6ff', '#7bd389'];
+      cols.forEach((col, i) => {
+        g.fillStyle = col;
+        g.fillRect(x + (i % 2) * 26, 92 + Math.floor(i / 2) * 32, 22, 28);
+      });
+    }
+    g.fillStyle = '#ffffff';
+    for (const [x, y] of [[30, 200], [90, 210], [150, 200], [210, 214]]) {
+      g.beginPath();
+      g.arc(x, y, 7, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  icing() {
+    const [c, g] = canvas(128, 64);
+    g.fillStyle = '#fff7fb';
+    g.fillRect(0, 0, 128, 64);
+    const cols = ['#ff6f91', '#ffd166', '#6ec6ff', '#7bd389'];
+    const r = rng(403);
+    for (let i = 0; i < 30; i++) {
+      g.fillStyle = cols[i % 4];
+      g.fillRect(r() * 128, r() * 64, 6, 2);
+    }
+    return c;
+  },
+
+  chocolate() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#5a3020';
+    g.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 2; x++) {
+        g.fillStyle = '#6e3c28';
+        g.fillRect(x * 64 + 6, y * 64 + 6, 52, 52);
+        g.fillStyle = '#4a2618';
+        g.fillRect(x * 64 + 6, y * 64 + 52, 52, 6);
+        g.fillRect(x * 64 + 52, y * 64 + 6, 6, 52);
+      }
+    }
+    return c;
+  },
+
+  waffle() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#e0a85a';
+    g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = '#b97f3e';
+    g.lineWidth = 6;
+    for (let i = -128; i < 256; i += 24) {
+      g.beginPath();
+      g.moveTo(i, 0);
+      g.lineTo(i + 128, 128);
+      g.moveTo(i + 128, 0);
+      g.lineTo(i, 128);
+      g.stroke();
+    }
+    return c;
+  },
+
+  cakeLayer() {
+    const [c, g] = canvas(256, 128);
+    g.fillStyle = '#ffb3c8';
+    g.fillRect(0, 0, 256, 128);
+    g.fillStyle = '#fff4e6';
+    g.fillRect(0, 0, 256, 18);
+    g.fillRect(0, 60, 256, 12);
+    g.fillStyle = '#ff6f91';
+    for (let x = 8; x < 256; x += 32) {
+      g.beginPath();
+      g.arc(x, 18, 9, 0, Math.PI);
+      g.fill();
+    }
+    g.fillStyle = '#e8435c';
+    for (let x = 20; x < 256; x += 40) {
+      g.beginPath();
+      g.arc(x, 96, 8, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
+  lollipop() {
+    const [c, g] = canvas(128, 128);
+    const cols = ['#ff6f91', '#ffffff', '#6ec6ff', '#ffffff', '#ffd166', '#ffffff'];
+    for (let i = 0; i < 24; i++) {
+      g.fillStyle = cols[i % cols.length];
+      g.beginPath();
+      g.moveTo(64, 64);
+      g.arc(64, 64, 90, (i / 24) * Math.PI * 2 + i * 0.05, ((i + 1) / 24) * Math.PI * 2 + (i + 1) * 0.05);
+      g.closePath();
+      g.fill();
+    }
+    return c;
+  },
+
+  sugar() {
+    const [c, g] = canvas(64, 64);
+    const r = rng(404);
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 200; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.3 + r() * 0.5})`;
+      g.fillRect(r() * 64, r() * 64, 2, 2);
+      g.fillStyle = 'rgba(0,0,0,.06)';
+      g.fillRect(r() * 64, r() * 64, 2, 2);
+    }
+    return c;
+  },
+
 };
 
 // 食べ物のイラスト（ロゴではない簡単な絵）
