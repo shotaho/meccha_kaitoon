@@ -238,7 +238,7 @@ export const MAPS = {
   },
 
   burger: {
-    name: 'ハンバーガーショップ',
+    name: 'マック',
     outdoor: true,
     bounds: { x0: -18, x1: 18, z0: -14, z1: 14, h: 10 },
     seekerSpawn: [14, 0, 12],
@@ -272,7 +272,7 @@ export const MAPS = {
   },
 
   blocks: {
-    name: 'ブロックのせかい',
+    name: 'マイクラ',
     outdoor: true,
     bounds: { x0: -16, x1: 16, z0: -12, z1: 12, h: 14 },
     seekerSpawn: [12, null, 9],
