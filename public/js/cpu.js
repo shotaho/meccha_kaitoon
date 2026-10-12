@@ -151,44 +151,57 @@ export function createCpuBrains(ctx) {
       }
 
       // ----- 移動 -----
+      const zeroG = !!MAPS[mapId].zeroG;
       const to = goal.clone().sub(b.pos);
-      to.y = 0;
+      if (zeroG) to.y += b.mode === 'chase' ? 0.3 : 0;
+      else to.y = 0;
       const dist = to.length();
       const before = b.pos.clone();
       let wantYaw = b.yaw;
       if (dist > goalDist) {
         to.normalize();
-        wantYaw = Math.atan2(-to.x, -to.z);
+        if (Math.hypot(to.x, to.z) > 0.05) wantYaw = Math.atan2(-to.x, -to.z);
         b.pos.addScaledVector(to, L.speed * dt);
       } else if (b.mode === 'wander' && !onWay) {
         pickTarget(b, world, mapId);
       }
-      b.vy -= 13 * dt;
-      b.pos.y += b.vy * dt;
-      const g0 = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
-      if (b.pos.y <= g0 && b.vy <= 0) {
-        b.pos.y = g0;
-        b.vy = 0;
-      }
-      collide(world.colliders, b.pos, R, H, world.bounds, 0.4);
-      const g = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
-      if (b.pos.y <= g) {
-        b.pos.y = g;
+      if (zeroG) {
+        // うちゅう：重力なしで、行きたいほうへまっすぐとぶ
+        collide(world.colliders, b.pos, R, H, world.bounds);
+        const g = groundAt(world.colliders, b.pos.x, b.pos.z, b.pos.y, R, 0.02);
+        const top = ceilingAt(world.colliders, b.pos.x, b.pos.z, b.pos.y, R, H, world.bounds);
+        b.pos.y = Math.min(Math.max(b.pos.y, g), Math.max(g, top));
         b.vy = 0;
         b.onGround = true;
       } else {
-        b.onGround = false;
+        b.vy -= 13 * dt;
+        b.pos.y += b.vy * dt;
+        const g0 = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
+        if (b.pos.y <= g0 && b.vy <= 0) {
+          b.pos.y = g0;
+          b.vy = 0;
+        }
+        collide(world.colliders, b.pos, R, H, world.bounds, 0.4);
+        const g = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
+        if (b.pos.y <= g) {
+          b.pos.y = g;
+          b.vy = 0;
+          b.onGround = true;
+        } else {
+          b.onGround = false;
+        }
+        const top = ceilingAt(world.colliders, b.pos.x, b.pos.z, b.pos.y, R, H, world.bounds);
+        if (b.pos.y > top) {
+          b.pos.y = top;
+          b.vy = Math.min(0, b.vy);
+        }
       }
-      const top = ceilingAt(world.colliders, b.pos.x, b.pos.z, b.pos.y, R, H, world.bounds);
-      if (b.pos.y > top) {
-        b.pos.y = top;
-        b.vy = Math.min(0, b.vy);
-      }
-      // 段差に引っかかったらジャンプ、ずっと進めなければ行き先を変える
+      // 段差に引っかかったらジャンプ（うちゅうでは上へよける）、ずっと進めなければ行き先を変える
       if (dist > goalDist) {
-        const moved = Math.hypot(b.pos.x - before.x, b.pos.z - before.z);
+        const moved = zeroG ? b.pos.distanceTo(before) : Math.hypot(b.pos.x - before.x, b.pos.z - before.z);
         if (moved < L.speed * dt * 0.3) {
-          if (b.onGround) b.vy = 6;
+          if (zeroG) b.pos.y = Math.min(b.pos.y + L.speed * dt, world.bounds.h - H);
+          else if (b.onGround) b.vy = 6;
           b.stuck += dt;
           if (b.stuck > 1.5) {
             b.mode = 'wander';

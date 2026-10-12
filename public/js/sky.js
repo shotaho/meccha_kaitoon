@@ -9,6 +9,8 @@ const STYLES = {
   candy: { top: '#b98cf0', mid: '#ffc4e4', bottom: '#fff1f8', cloud: ['#ffffff', '#ffd1ea', '#ffb3dc'], shape: 'puff' },
   blocks: { top: '#5d8ff2', mid: '#93bbff', bottom: '#d8e6ff', cloud: ['#ffffff'], shape: 'block' },
   sea: { top: '#bff3ff', mid: '#3d9fd0', bottom: '#14527e', cloud: ['#e8fbff'], shape: 'wave' },
+  city: { top: '#3a86d8', mid: '#9cd0f5', bottom: '#f2f8ff', cloud: ['#ffffff', '#f1f3f5'], shape: 'puff' },
+  space: { top: '#03040c', mid: '#0b0d24', bottom: '#14163a', cloud: ['#ffffff'], shape: 'stars' },
 };
 
 const DOME_R = 120;
@@ -34,7 +36,33 @@ function skyTexture(st, seed) {
   const wrap = (fn) => {
     for (const dx of [-W, 0, W]) fn(dx);
   };
-  if (st.shape === 'wave') {
+  if (st.shape === 'stars') {
+    // ほしと、もやもやの星雲
+    g.fillStyle = st.mid;
+    g.fillRect(0, H / 2, W, H / 2);
+    for (const col of ['#5b2a86', '#1f4e8c', '#8c2a5b', '#2a7f86']) {
+      for (let i = 0; i < 3; i++) {
+        const x = r() * W;
+        const y = r() * H;
+        const rad = 60 + r() * 140;
+        wrap((dx) => {
+          const gr = g.createRadialGradient(x + dx, y, 0, x + dx, y, rad);
+          gr.addColorStop(0, col + 'aa');
+          gr.addColorStop(1, col + '00');
+          g.fillStyle = gr;
+          g.fillRect(x + dx - rad, y - rad, rad * 2, rad * 2);
+        });
+      }
+    }
+    for (let i = 0; i < 1400; i++) {
+      const big = r() < 0.06;
+      g.fillStyle = ['#ffffff', '#ffe9a8', '#bcd7ff'][Math.floor(r() * 3)];
+      g.globalAlpha = 0.5 + r() * 0.5;
+      const sz = big ? 2.5 : 1.2;
+      g.fillRect(r() * W, r() * H, sz, sz);
+    }
+    g.globalAlpha = 1;
+  } else if (st.shape === 'wave') {
     // 水面のゆらゆら（上のほうに明るい網目）
     g.globalAlpha = 0.45;
     g.strokeStyle = st.cloud[0];
@@ -142,7 +170,7 @@ export function buildSky(group, mapId, bounds) {
   group.add(dome);
 
   const clouds = new THREE.Group();
-  if (st.shape !== 'wave') {
+  if (st.shape !== 'wave' && st.shape !== 'stars') {
     const reach = Math.max(bounds.x1 - bounds.x0, bounds.z1 - bounds.z0) / 2;
     for (let i = 0; i < 12; i++) {
       const c = cloud3d(st, r);

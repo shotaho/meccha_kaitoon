@@ -106,6 +106,7 @@ export class Character {
 
     this.outlineMat = new THREE.MeshBasicMaterial({ color: '#ffd400', side: THREE.BackSide });
     const seekerMat = new THREE.MeshLambertMaterial({ color: '#e23b3b' });
+    this.seekerMat = seekerMat;
 
     PARTS.forEach((p, i) => {
       const geo = partGeometry(p);
@@ -165,6 +166,45 @@ export class Character {
     this.label.position.y = 2.15;
     this.label.visible = false;
     this.root.add(this.label);
+  }
+
+  // うちゅうふく（おにだけ）。ヘルメット・せなかのタンク・白いスーツ
+  setSuit(on) {
+    on = !!on && this.kind === 'seeker';
+    if (on === !!this.suit) return;
+    if (on) {
+      const noRay = (m) => {
+        m.raycast = () => {};
+        return m;
+      };
+      const red = new THREE.MeshLambertMaterial({ color: '#e23b3b' });
+      const grey = new THREE.MeshLambertMaterial({ color: '#adb5bd' });
+      const glass = new THREE.MeshPhongMaterial({ color: '#cfefff', transparent: true, opacity: 0.35, shininess: 90, depthWrite: false });
+      const helmet = noRay(new THREE.Mesh(new THREE.SphereGeometry(0.31, 24, 16), glass));
+      helmet.position.y = 0.17;
+      const collar = noRay(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 10, 24), red));
+      collar.position.y = -0.04;
+      collar.rotation.x = Math.PI / 2;
+      const pack = noRay(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.2), grey));
+      pack.position.set(0, 0.4, -0.31);
+      const tanks = [-0.1, 0.1].map((x) => {
+        const t = noRay(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 12), red));
+        t.position.set(x, 0.42, -0.43);
+        return t;
+      });
+      this.headPivot.add(helmet, collar);
+      this.torsoPivot.add(pack, ...tanks);
+      this.suit = [helmet, collar, pack, ...tanks];
+      this.seekerMat.color.set('#f1f3f5');
+    } else {
+      for (const m of this.suit) {
+        m.removeFromParent();
+        m.geometry.dispose();
+        m.material.dispose();
+      }
+      this.suit = null;
+      this.seekerMat.color.set('#e23b3b');
+    }
   }
 
   setOutline(color) {

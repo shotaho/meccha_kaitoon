@@ -1182,7 +1182,30 @@ function updateOrbitCamera() {
   camera.lookAt(tgt.clone().addScaledVector(dir, d - 1));
 }
 
+// うちゅうでは、おにも重力なしでどこへでもとべる
+function updateSeekerSpace(dt) {
+  const { f, s } = moveInput();
+  let v = vertInput();
+  if (keys.has('Space')) v += 1;
+  const [yaw, pitch] = self.look;
+  const fw = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+  const rt = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  const sp = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6.5 : 4.2;
+  self.pos.addScaledVector(fw, f * sp * dt).addScaledVector(rt, s * sp * dt);
+  self.pos.y += clamp(v, -1, 1) * sp * dt;
+  collide(world.colliders, self.pos, BODY_RADIUS, 1.7, world.bounds);
+  const g = groundAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, BODY_RADIUS, 0.02);
+  const top = ceilingAt(world.colliders, self.pos.x, self.pos.z, self.pos.y, BODY_RADIUS, 1.7, world.bounds);
+  self.pos.y = clamp(self.pos.y, g, Math.max(g, top));
+  self.vy = 0;
+  self.onGround = true;
+  self.pose = 'stand';
+  camera.position.set(self.pos.x, self.pos.y + 1.55, self.pos.z);
+  camera.rotation.set(self.look[1], self.look[0], 0);
+}
+
 function updateSeeker(dt) {
+  if (MAPS[world.id]?.zeroG) return updateSeekerSpace(dt);
   const { f, s } = moveInput();
   const yaw = self.look[0];
   const fw = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -1281,7 +1304,9 @@ function updateVisibility() {
   const phase = S?.phase;
   const myRole = me()?.role;
   const t = performance.now() / 1000;
+  const suit = !!MAPS[world.id]?.zeroG;
   for (const [id, c] of chars) {
+    c.setSuit(suit);
     const info = playerInfo(id);
     let vis = false;
     let label = false;
@@ -1368,7 +1393,7 @@ function renderHint() {
       : '<b>ペイントモード</b><br>ひだりドラッグ：ぬる　みぎドラッグ：カメラ　ホイール：ズーム<br>Alt+クリック：スポイト　1〜5：どうぐ　[ ]：ふとさ<br>Ctrl+Z：もどす　Ctrl+Y：やりなおし<br><b>スペース：いどうモードへ</b>';
   } else if (viewMode === 'fps') {
     html = document.pointerLockElement
-      ? '<b>おに</b>　WASD：いどう　Shift：はしる　スペース：ジャンプ<br>クリック：ペイントだん（はずすとじかんがへる）　Esc：マウスかいほう'
+      ? (MAPS[world.id]?.zeroG ? '<b>おに（うちゅう）</b>　WASD：みているほうへとぶ　スペース/E：うえ　Q：した　Shift：はやく<br>' : '<b>おに</b>　WASD：いどう　Shift：はしる　スペース：ジャンプ<br>') + 'クリック：ペイントだん（はずすとじかんがへる）　Esc：マウスかいほう'
       : '<b>がめんをクリックしてしてんそうさをスタート</b>';
   } else if (viewMode === 'frozen') {
     html = hiderMode === 'paint'
@@ -1398,7 +1423,7 @@ function renderTouch() {
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => held.delete(name));
     return b;
   };
-  if (viewMode === 'fps') btns.append(hold('jump', '⤒'));
+  if (viewMode === 'fps' && !MAPS[world.id]?.zeroG) btns.append(hold('jump', '⤒'));
   else btns.append(hold('up', '⬆'), hold('down', '⬇'));
 }
 

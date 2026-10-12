@@ -1417,6 +1417,283 @@ const GEN = {
     return c;
   },
 
+  // ----- まち -----
+  officeFacade() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(501);
+    g.fillStyle = '#b9c0c8';
+    g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        const l = 30 + r() * 25;
+        const grd = g.createLinearGradient(0, y * 64, 0, y * 64 + 50);
+        grd.addColorStop(0, hsl(205, 45, l + 15));
+        grd.addColorStop(1, hsl(210, 40, l));
+        g.fillStyle = grd;
+        g.fillRect(x * 64 + 6, y * 64 + 8, 52, 44);
+        g.fillStyle = 'rgba(255,255,255,.25)';
+        g.fillRect(x * 64 + 10, y * 64 + 12, 8, 36);
+      }
+      g.fillStyle = '#9aa2ab';
+      g.fillRect(0, y * 64 + 56, 256, 8);
+    }
+    return c;
+  },
+  apartment() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(502);
+    g.fillStyle = '#efe4cf';
+    g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 2; x++) {
+        const ox = x * 128;
+        const oy = y * 128;
+        g.fillStyle = '#6f8fae';
+        g.fillRect(ox + 20, oy + 14, 88, 62);
+        g.fillStyle = r() < 0.5 ? '#f5e6a8' : '#e8eef3';
+        g.fillRect(ox + 24, oy + 18, 38, 54);
+        g.fillStyle = '#cfd6dc';
+        g.fillRect(ox + 66, oy + 18, 38, 54);
+        // ベランダ
+        g.fillStyle = '#d6cbb6';
+        g.fillRect(ox + 8, oy + 80, 112, 36);
+        g.fillStyle = '#b8ad98';
+        for (let i = 0; i < 14; i++) g.fillRect(ox + 10 + i * 8, oy + 80, 2, 36);
+        if (r() < 0.6) {
+          g.fillStyle = hsl(r() * 360, 60, 65);
+          g.fillRect(ox + 30 + r() * 40, oy + 82, 18, 22);
+        }
+      }
+    }
+    return c;
+  },
+  sidewalk() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(503);
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        g.fillStyle = hsl(30, 8, 70 + r() * 8);
+        g.fillRect(x * 32, y * 32, 32, 32);
+        g.strokeStyle = 'rgba(0,0,0,.18)';
+        g.strokeRect(x * 32 + 0.5, y * 32 + 0.5, 31, 31);
+      }
+    }
+    return c;
+  },
+  lawn() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(504);
+    g.fillStyle = '#6fae4a';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 500; i++) {
+      g.fillStyle = hsl(95 + r() * 20, 45, 35 + r() * 25);
+      g.fillRect(r() * 128, r() * 128, 2, 4);
+    }
+    return c;
+  },
+  konbiniSign() {
+    const [c, g] = canvas(512, 64);
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 512, 64);
+    g.fillStyle = '#2f9e44';
+    g.fillRect(0, 6, 512, 14);
+    g.fillStyle = '#f08c00';
+    g.fillRect(0, 22, 512, 14);
+    g.fillStyle = '#e03131';
+    g.fillRect(0, 38, 512, 14);
+    g.fillStyle = '#ffffff';
+    g.fillRect(150, 8, 212, 48);
+    g.fillStyle = '#222';
+    g.font = 'bold 34px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('コンビニ', 256, 33);
+    return c;
+  },
+  busSign() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(32, 32, 30, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#1c7ed6';
+    g.beginPath();
+    g.arc(32, 32, 26, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#fff';
+    g.font = 'bold 20px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('バス', 32, 33);
+    return c;
+  },
+  shutter() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#a7adb3';
+    g.fillRect(0, 0, 64, 64);
+    for (let y = 0; y < 64; y += 6) {
+      g.fillStyle = '#8b9197';
+      g.fillRect(0, y, 64, 2);
+    }
+    return c;
+  },
+
+  signal() {
+    const [c, g] = canvas(128, 48);
+    g.fillStyle = '#2b2b2b';
+    g.fillRect(0, 0, 128, 48);
+    ['#3ddc84', '#ffd43b', '#ff4d4f'].forEach((col, i) => {
+      g.fillStyle = '#111';
+      g.beginPath();
+      g.arc(22 + i * 42, 24, 17, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = col;
+      g.globalAlpha = i === 0 ? 1 : 0.35;
+      g.beginPath();
+      g.arc(22 + i * 42, 24, 13, 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = 1;
+    });
+    return c;
+  },
+
+  // ----- うちゅう -----
+  moonGround() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(601);
+    g.fillStyle = '#9a9a9e';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 1500; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,255,255'},${r() * 0.12})`;
+      g.fillRect(r() * 256, r() * 256, 2, 2);
+    }
+    for (let i = 0; i < 16; i++) {
+      const x = r() * 256;
+      const y = r() * 256;
+      const rad = 6 + r() * 22;
+      for (const dx of [-256, 0, 256]) {
+        for (const dy of [-256, 0, 256]) {
+          g.fillStyle = 'rgba(0,0,0,.18)';
+          g.beginPath();
+          g.arc(x + dx, y + dy, rad, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = 'rgba(255,255,255,.12)';
+          g.beginPath();
+          g.arc(x + dx + rad * 0.15, y + dy + rad * 0.15, rad * 0.8, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+    return c;
+  },
+  stationPanel() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(602);
+    g.fillStyle = '#e9ecef';
+    g.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 2; x++) {
+        g.strokeStyle = '#adb5bd';
+        g.lineWidth = 2;
+        g.strokeRect(x * 64 + 3, y * 64 + 3, 58, 58);
+        g.fillStyle = '#ced4da';
+        for (const [px, py] of [[8, 8], [54, 8], [8, 54], [54, 54]]) g.fillRect(x * 64 + px, y * 64 + py, 3, 3);
+        if (r() < 0.3) {
+          g.fillStyle = '#4dabf7';
+          g.fillRect(x * 64 + 20, y * 64 + 24, 24, 6);
+        }
+      }
+    }
+    return c;
+  },
+  solarPanel() {
+    const [c, g] = canvas(128, 128);
+    g.fillStyle = '#c9a227';
+    g.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        const grd = g.createLinearGradient(x * 32, y * 32, x * 32 + 30, y * 32 + 30);
+        grd.addColorStop(0, '#1e3a8a');
+        grd.addColorStop(1, '#2b59c3');
+        g.fillStyle = grd;
+        g.fillRect(x * 32 + 2, y * 32 + 2, 28, 28);
+        g.fillStyle = 'rgba(255,255,255,.15)';
+        g.fillRect(x * 32 + 2, y * 32 + 15, 28, 1);
+        g.fillRect(x * 32 + 15, y * 32 + 2, 1, 28);
+      }
+    }
+    return c;
+  },
+  foil() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(603);
+    g.fillStyle = '#d4a017';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 60; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? '255,240,180' : '120,80,0'},${0.2 + r() * 0.3})`;
+      g.beginPath();
+      g.moveTo(r() * 128, r() * 128);
+      g.lineTo(r() * 128, r() * 128);
+      g.lineTo(r() * 128, r() * 128);
+      g.fill();
+    }
+    return c;
+  },
+  rocket() {
+    const [c, g] = canvas(128, 256);
+    g.fillStyle = '#f8f9fa';
+    g.fillRect(0, 0, 128, 256);
+    g.fillStyle = '#e03131';
+    g.fillRect(0, 0, 128, 30);
+    g.fillRect(0, 226, 128, 30);
+    g.fillStyle = '#495057';
+    g.fillRect(0, 120, 128, 6);
+    g.fillStyle = '#1c7ed6';
+    g.beginPath();
+    g.arc(64, 70, 18, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#a5d8ff';
+    g.beginPath();
+    g.arc(60, 66, 10, 0, Math.PI * 2);
+    g.fill();
+    return c;
+  },
+  planetEarth() {
+    const [c, g] = canvas(256, 128);
+    const r = rng(604);
+    g.fillStyle = '#1c64c8';
+    g.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 14; i++) {
+      const x = r() * 256;
+      const y = 20 + r() * 88;
+      g.fillStyle = '#3f9e4d';
+      for (let j = 0; j < 10; j++) {
+        g.beginPath();
+        g.arc(x + (r() - 0.5) * 40, y + (r() - 0.5) * 20, 4 + r() * 9, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    g.fillStyle = 'rgba(255,255,255,.7)';
+    for (let i = 0; i < 40; i++) {
+      g.beginPath();
+      g.ellipse(r() * 256, r() * 128, 8 + r() * 20, 2 + r() * 3, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, 256, 8);
+    g.fillRect(0, 120, 256, 8);
+    return c;
+  },
+  planetStripes() {
+    const [c, g] = canvas(64, 128);
+    const r = rng(605);
+    for (let y = 0; y < 128; y += 4) {
+      g.fillStyle = hsl(28 + r() * 15, 55, 55 + r() * 20);
+      g.fillRect(0, y, 64, 4);
+    }
+    return c;
+  },
+
 };
 
 // 食べ物のイラスト（ロゴではない簡単な絵）
