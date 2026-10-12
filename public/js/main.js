@@ -82,7 +82,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#222222');
-const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 100);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 200);
 camera.rotation.order = 'YXZ';
 let world = buildWorld(scene, 'house');
 
@@ -1050,6 +1050,7 @@ function step() {
   updateVisibility();
   updateCamo();
   brains.update(dt);
+  world.update();
 
   for (let i = splats.length - 1; i >= 0; i--) {
     const s = splats[i];

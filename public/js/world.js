@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { tex } from './textures.js';
 import { MAPS, genBlocks, BLOCKS } from './maps.js';
 import { blockMaterials } from './blocktex.js';
+import { buildSky } from './sky.js';
 
 const FACE_DIRS = ['+x', '-x', '+y', '-y', '+z', '-z'];
 
@@ -135,6 +136,7 @@ export function buildWorld(scene, mapId) {
 
   scene.background = new THREE.Color(def.sky || (def.outdoor ? '#9fd3f5' : '#222222'));
   scene.fog = def.fog ? new THREE.Fog(def.fog.color, def.fog.near, def.fog.far) : null;
+  const sky = buildSky(group, mapId, bounds);
 
   return {
     id: MAPS[mapId] ? mapId : 'house',
@@ -142,6 +144,9 @@ export function buildWorld(scene, mapId) {
     meshes,
     colliders,
     bounds,
+    update() {
+      if (sky) sky.update();
+    },
     dispose() {
       group.removeFromParent();
       scene.fog = null;
