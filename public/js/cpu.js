@@ -55,6 +55,7 @@ export function createCpuBrains(ctx) {
     }
     b.target = new THREE.Vector3(...(best || nav[0]));
     b.stuck = 0;
+    b.path = [];
   }
 
   // 隠れている人がどれくらい目立つか（0〜1）と見えている大きさ
@@ -109,6 +110,7 @@ export function createCpuBrains(ctx) {
           sendT: 0,
           time: Math.random() * 10,
           stuck: 0,
+          path: [],
         };
         pickTarget(b, world, mapId);
         brains.set(p.id, b);
@@ -124,10 +126,28 @@ export function createCpuBrains(ctx) {
         if (!tp || tp.found || tp.role !== 'hider' || !tc) {
           b.mode = 'wander';
           pickTarget(b, world, mapId);
+          goal = b.target;
         } else {
           goal = tc.root.position.clone();
           goalDist = 4.5;
         }
+      }
+      // 高さがちがう場所へはかいだんを通って行く
+      const st = MAPS[mapId].stairs;
+      if (st && !b.path.length) {
+        const up = goal.y > 2.5;
+        const high = b.pos.y > 2.5;
+        if (up && !high) b.path = [st.bottom, st.top].map((q) => new THREE.Vector3(...q));
+        else if (!up && high) b.path = [st.top, st.bottom, st.exit].map((q) => new THREE.Vector3(...q));
+      }
+      if (b.path.length) {
+        const w = b.path[0];
+        if (Math.hypot(w.x - b.pos.x, w.z - b.pos.z) < 0.5 && Math.abs(w.y - b.pos.y) < 0.8) b.path.shift();
+      }
+      const onWay = b.path.length > 0;
+      if (onWay) {
+        goal = b.path[0];
+        goalDist = 0.3;
       }
 
       // ----- 移動 -----
@@ -140,7 +160,7 @@ export function createCpuBrains(ctx) {
         to.normalize();
         wantYaw = Math.atan2(-to.x, -to.z);
         b.pos.addScaledVector(to, L.speed * dt);
-      } else if (b.mode === 'wander') {
+      } else if (b.mode === 'wander' && !onWay) {
         pickTarget(b, world, mapId);
       }
       b.vy -= 13 * dt;
@@ -150,7 +170,7 @@ export function createCpuBrains(ctx) {
         b.pos.y = g0;
         b.vy = 0;
       }
-      collide(world.colliders, b.pos, R, H, world.bounds);
+      collide(world.colliders, b.pos, R, H, world.bounds, 0.4);
       const g = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
       if (b.pos.y <= g) {
         b.pos.y = g;
@@ -233,12 +253,13 @@ export function createCpuBrains(ctx) {
           const prob = area < 6 ? 0 : THREE.MathUtils.clamp((ratio - L.t0) / (1 - L.t0), 0, 1) * Math.sqrt(sizeF) * L.mult;
           if (Math.random() < prob) {
             b.mode = 'chase';
+            b.path = [];
             b.chaseId = best.id;
             b.reactT = L.react * (0.7 + Math.random() * 0.6);
           } else if (prob > 0.08 && best.d > 4) {
             // あやしいので近づいてみる
             b.target = best.c.clone();
-            b.target.y = b.pos.y;
+            b.target.y = Math.max(0, best.c.y - 0.9);
           }
         } else if (Math.random() < L.miss) {
           // 早とちりで撃ってしまう（はずれ）

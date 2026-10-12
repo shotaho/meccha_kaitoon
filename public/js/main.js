@@ -1155,18 +1155,31 @@ function keepBodyOutOfObjects() {
   }
 }
 
+// 壁ぎわでもぐるっと見回せるように、カメラは壁の手前まで寄せる（向きはそのまま）
+const camRay = new THREE.Raycaster();
+let camClose = false;
 function updateOrbitCamera() {
   const hgt = POSE_HEIGHT[self.pose] || 1.7;
   const tgt = self.pos.clone();
   tgt.y += Math.min(1.0, hgt * 0.55);
   const cp = Math.cos(orbit.pitch);
-  const off = new THREE.Vector3(Math.sin(orbit.yaw) * cp, Math.sin(orbit.pitch), Math.cos(orbit.yaw) * cp).multiplyScalar(orbit.dist);
-  const pos = tgt.clone().add(off);
-  pos.x = clamp(pos.x, world.bounds.x0 + 0.1, world.bounds.x1 - 0.1);
-  pos.z = clamp(pos.z, world.bounds.z0 + 0.1, world.bounds.z1 - 0.1);
-  pos.y = clamp(pos.y, 0.1, world.bounds.h - 0.1);
-  camera.position.copy(pos);
-  camera.lookAt(tgt);
+  const dir = new THREE.Vector3(Math.sin(orbit.yaw) * cp, Math.sin(orbit.pitch), Math.cos(orbit.yaw) * cp);
+  let d = orbit.dist;
+  // ステージの外に出ない
+  const b = world.bounds;
+  const m = 0.15;
+  const lim = (p, v, lo, hi) => (v > 1e-6 ? (hi - p) / v : v < -1e-6 ? (lo - p) / v : Infinity);
+  d = Math.min(d, lim(tgt.x, dir.x, b.x0 + m, b.x1 - m), lim(tgt.y, dir.y, 0.1, b.h - m), lim(tgt.z, dir.z, b.z0 + m, b.z1 - m));
+  // 物の手前で止める
+  camRay.set(tgt, dir);
+  camRay.near = 0;
+  camRay.far = Math.max(0.01, d);
+  const hit = camRay.intersectObjects(world.meshes, false)[0];
+  if (hit) d = Math.min(d, hit.distance - 0.2);
+  d = Math.max(0, d);
+  camClose = d < 0.5;
+  camera.position.copy(tgt).addScaledVector(dir, d);
+  camera.lookAt(tgt.clone().addScaledVector(dir, d - 1));
 }
 
 function updateSeeker(dt) {
@@ -1185,7 +1198,7 @@ function updateSeeker(dt) {
     self.pos.y = g0;
     self.vy = 0;
   }
-  collide(world.colliders, self.pos, BODY_RADIUS, 1.7, world.bounds);
+  collide(world.colliders, self.pos, BODY_RADIUS, 1.7, world.bounds, 0.4);
   const g = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.4);
   if (self.pos.y <= g) {
     self.pos.y = g;
@@ -1290,6 +1303,8 @@ function updateVisibility() {
         }
       }
     }
+    // カメラが体のすぐそばのときは自分の体をかくして、まわりを見やすくする
+    if (vis && id === myId && camClose && (viewMode === 'hider' || viewMode === 'frozen')) vis = false;
     c.root.visible = vis;
     if (c.label) c.label.visible = vis && label;
     c.setOutline(vis ? outline : null);

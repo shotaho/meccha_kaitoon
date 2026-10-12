@@ -313,6 +313,18 @@ function buildBurger(k) {
   box(3.7, 4, 2.2, H, -6, -4.5, { ...outer, faces: { '-x': inner } }); // 受け渡し窓の上
   // 屋根
   box(-14.3, 4.3, H, H + 0.6, -11.3, 1.3, { tex: 'yellowWall', tile: 1.5, faces: { '-y': { tex: 'ceiling', tile: 1.2 }, '+y': { tex: 'concrete', tile: 3 } } });
+  // 屋上へのぼる外かいだん（西がわ）。おにも屋上まで行ける
+  const RT = H + 0.6;
+  const steps = 15;
+  for (let i = 0; i < steps; i++) {
+    const y1 = (RT * (i + 1)) / steps;
+    const z1 = 10.2 - i * 0.6;
+    box(-16.6, -14.3, 0, y1, z1 - 0.6, z1, { tex: 'concrete', tile: 1.2, faces: { '+y': { tex: 'checker', tile: 0.6, color: '#bfbfbf' } } });
+    // てすり（横からはのぼれない）
+    box(-14.42, -14.3, y1, y1 + 1.1, z1 - 0.6, z1, { color: '#9aa1a8' });
+    box(-16.6, -16.48, y1, y1 + 1.1, z1 - 0.6, z1, { color: '#9aa1a8' });
+  }
+  box(-16.6, -14.3, 0, RT, -1.5, 1.2, { tex: 'concrete', tile: 1.2 }); // おどりば
   // 入口のひさし・窓
   box(-6.6, -2.4, 2.8, 3.05, 1, 2.1, { tex: 'awning', tile: 0.6 });
   for (const x of [-11, -8.4, -0.4, 2.2]) plate(x, 1.9, 1.03, 2.2, 1.5, '+z', 'shopWindow');
@@ -386,7 +398,7 @@ function buildBurger(k) {
   box(-18, 4, 0, 1.2, 13, 14, { tex: 'hedge', tile: 1 });
   box(10, 18, 0, 1.2, 13, 14, { tex: 'hedge', tile: 1 });
   box(-18, -17, 0, 1.2, -14, 13, { tex: 'hedge', tile: 1 });
-  plant(-16, 11, 1.4, 1.6);
+  plant(-16, 12.2, 1.4, 1.6);
   plant(12.5, -12.5, 1.4, 1.6);
   plant(16.5, 6, 1.4, 1.6);
   plant(-2.2, 1.7, 0.9);
@@ -660,10 +672,11 @@ export function overlapsXZ(c, x, z, r) {
 }
 
 // 水平方向の押し出し。pos は THREE.Vector3（足元）
-export function collide(colliders, pos, r, h, bounds) {
+// step: これ以下の段差は押し返さずに乗り越える（かいだん用）
+export function collide(colliders, pos, r, h, bounds, step = 0) {
   for (let iter = 0; iter < 3; iter++) {
     for (const c of colliders) {
-      if (pos.y >= c.y1 - 0.001 || pos.y + h <= c.y0) continue;
+      if (pos.y >= c.y1 - 0.001 - step || pos.y + h <= c.y0) continue;
       if (!overlapsXZ(c, pos.x, pos.z, r)) continue;
       const nx = Math.max(c.x0, Math.min(pos.x, c.x1));
       const nz = Math.max(c.z0, Math.min(pos.z, c.z1));
