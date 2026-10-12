@@ -176,13 +176,13 @@ export function createCpuBrains(ctx) {
       } else {
         b.vy -= 13 * dt;
         b.pos.y += b.vy * dt;
-        const g0 = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
+        const g0 = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.42);
         if (b.pos.y <= g0 && b.vy <= 0) {
           b.pos.y = g0;
           b.vy = 0;
         }
-        collide(world.colliders, b.pos, R, H, world.bounds, 0.4);
-        const g = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.4);
+        collide(world.colliders, b.pos, R, H, world.bounds, 0.42);
+        const g = groundAt(world.colliders, b.pos.x, b.pos.z, Math.max(b.pos.y, 0), R, 0.42);
         if (b.pos.y <= g) {
           b.pos.y = g;
           b.vy = 0;

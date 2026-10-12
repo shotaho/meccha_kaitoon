@@ -1216,13 +1216,13 @@ function updateSeeker(dt) {
   self.vy -= 13 * dt;
   self.pos.y += self.vy * dt;
   // 先に着地を判定する（ジャンプで台の上に乗れるように）
-  const g0 = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.4);
+  const g0 = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.42);
   if (self.pos.y <= g0 && self.vy <= 0) {
     self.pos.y = g0;
     self.vy = 0;
   }
-  collide(world.colliders, self.pos, BODY_RADIUS, 1.7, world.bounds, 0.4);
-  const g = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.4);
+  collide(world.colliders, self.pos, BODY_RADIUS, 1.7, world.bounds, 0.42);
+  const g = groundAt(world.colliders, self.pos.x, self.pos.z, Math.max(self.pos.y, 0), BODY_RADIUS, 0.42);
   if (self.pos.y <= g) {
     self.pos.y = g;
     self.vy = 0;

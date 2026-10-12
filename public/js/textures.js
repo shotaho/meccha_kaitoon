@@ -1557,6 +1557,254 @@ const GEN = {
     return c;
   },
 
+  // ----- 無人島・佐渡島 -----
+  water() {
+    const [c, g] = canvas(256, 256);
+    const r = rng(701);
+    g.fillStyle = '#2a9fd6';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 220; i++) {
+      const x = r() * 256;
+      const y = r() * 256;
+      const w = 10 + r() * 30;
+      g.strokeStyle = `rgba(255,255,255,${0.15 + r() * 0.3})`;
+      g.lineWidth = 1.5;
+      for (const dx of [-256, 0, 256]) {
+        for (const dy of [-256, 0, 256]) {
+          g.beginPath();
+          g.moveTo(x + dx - w / 2, y + dy);
+          g.quadraticCurveTo(x + dx, y + dy - 4, x + dx + w / 2, y + dy);
+          g.stroke();
+        }
+      }
+    }
+    return c;
+  },
+  palmTrunk() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#8b6a43';
+    g.fillRect(0, 0, 64, 64);
+    for (let y = 0; y < 64; y += 8) {
+      g.fillStyle = '#6e512f';
+      g.fillRect(0, y, 64, 3);
+      g.fillStyle = '#a9875a';
+      g.fillRect(0, y + 3, 64, 1);
+    }
+    return c;
+  },
+  palmLeaf() {
+    const [c, g] = canvas(32, 128);
+    g.fillStyle = '#2f8f3a';
+    g.fillRect(0, 0, 32, 128);
+    g.fillStyle = '#5fbf4a';
+    g.fillRect(14, 0, 4, 128);
+    g.strokeStyle = '#1f6b2a';
+    for (let y = 4; y < 128; y += 6) {
+      g.beginPath();
+      g.moveTo(16, y);
+      g.lineTo(0, y + 8);
+      g.moveTo(16, y);
+      g.lineTo(32, y + 8);
+      g.stroke();
+    }
+    return c;
+  },
+  bamboo() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(702);
+    for (let x = 0; x < 128; x += 16) {
+      g.fillStyle = hsl(48 + r() * 10, 45, 55 + r() * 10);
+      g.fillRect(x, 0, 16, 128);
+      g.fillStyle = 'rgba(0,0,0,.25)';
+      g.fillRect(x, 0, 2, 128);
+      g.fillStyle = 'rgba(255,255,255,.2)';
+      g.fillRect(x + 4, 0, 3, 128);
+      const ny = r() * 128;
+      g.fillStyle = 'rgba(80,60,20,.5)';
+      g.fillRect(x, ny, 16, 3);
+      g.fillRect(x, (ny + 64) % 128, 16, 3);
+    }
+    return c;
+  },
+  thatch() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(703);
+    g.fillStyle = '#b89a52';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 700; i++) {
+      g.strokeStyle = hsl(40 + r() * 12, 45, 35 + r() * 30);
+      g.beginPath();
+      const x = r() * 128;
+      const y = r() * 128;
+      g.moveTo(x, y);
+      g.lineTo(x + (r() - 0.5) * 4, y + 10 + r() * 14);
+      g.stroke();
+    }
+    return c;
+  },
+  ricePaddy() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(704);
+    g.fillStyle = '#6a8f6a';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = 'rgba(160,210,240,.35)';
+    g.fillRect(0, 0, 128, 128);
+    for (let y = 4; y < 128; y += 10) {
+      for (let x = 4; x < 128; x += 10) {
+        g.fillStyle = hsl(95 + r() * 15, 55, 35 + r() * 15);
+        g.fillRect(x + (r() - 0.5) * 2, y, 3, 6);
+        g.fillRect(x + 2, y - 2, 2, 4);
+      }
+    }
+    return c;
+  },
+  dirt() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(705);
+    g.fillStyle = '#7a5a3a';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 600; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? '40,25,10' : '160,130,90'},${r() * 0.3})`;
+      g.fillRect(r() * 128, r() * 128, 3, 2);
+    }
+    g.fillStyle = 'rgba(90,140,60,.6)';
+    g.fillRect(0, 0, 128, 8);
+    return c;
+  },
+  sadoWood() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(706);
+    for (let x = 0; x < 128; x += 16) {
+      g.fillStyle = hsl(25, 30, 18 + r() * 8);
+      g.fillRect(x, 0, 16, 128);
+      g.fillStyle = 'rgba(0,0,0,.4)';
+      g.fillRect(x, 0, 1, 128);
+      for (let k = 0; k < 6; k++) {
+        g.fillStyle = 'rgba(255,255,255,.05)';
+        g.fillRect(x + 2 + r() * 12, 0, 1, 128);
+      }
+    }
+    g.fillStyle = '#2a1a10';
+    g.fillRect(0, 60, 128, 6);
+    return c;
+  },
+  kawara() {
+    const [c, g] = canvas(128, 64);
+    g.fillStyle = '#3b4148';
+    g.fillRect(0, 0, 128, 64);
+    for (let x = 0; x < 128; x += 16) {
+      const grd = g.createLinearGradient(x, 0, x + 16, 0);
+      grd.addColorStop(0, '#2a2f35');
+      grd.addColorStop(0.5, '#5a626b');
+      grd.addColorStop(1, '#2a2f35');
+      g.fillStyle = grd;
+      g.fillRect(x, 0, 16, 64);
+    }
+    g.fillStyle = 'rgba(0,0,0,.35)';
+    g.fillRect(0, 30, 128, 3);
+    g.fillRect(0, 62, 128, 2);
+    return c;
+  },
+  pinePanel() {
+    const [c, g] = canvas(256, 128);
+    g.fillStyle = '#d8c08a';
+    g.fillRect(0, 0, 256, 128);
+    g.strokeStyle = '#5a3b20';
+    g.lineWidth = 9;
+    g.beginPath();
+    g.moveTo(120, 128);
+    g.bezierCurveTo(110, 90, 150, 70, 128, 30);
+    g.stroke();
+    g.lineWidth = 5;
+    for (const [x, y, ex, ey] of [[125, 80, 60, 60], [132, 62, 200, 48], [128, 40, 80, 24], [128, 32, 170, 18]]) {
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(ex, ey);
+      g.stroke();
+    }
+    g.fillStyle = '#2f6b3a';
+    for (const [x, y, w] of [[60, 56, 46], [200, 44, 50], [80, 20, 40], [170, 14, 44], [128, 26, 36]]) {
+      g.beginPath();
+      g.ellipse(x, y, w / 2, 12, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+  goldOre() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(707);
+    g.fillStyle = '#6b625a';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 400; i++) {
+      g.fillStyle = `rgba(0,0,0,${r() * 0.2})`;
+      g.fillRect(r() * 128, r() * 128, 3, 3);
+    }
+    for (let i = 0; i < 40; i++) {
+      g.fillStyle = r() < 0.5 ? '#ffd43b' : '#f2b705';
+      g.beginPath();
+      g.arc(r() * 128, r() * 128, 1.5 + r() * 3.5, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+  kinzanSign() {
+    const [c, g] = canvas(256, 96);
+    g.fillStyle = '#5a3b20';
+    g.fillRect(0, 0, 256, 96);
+    g.fillStyle = '#e9d8b4';
+    g.fillRect(8, 8, 240, 80);
+    g.fillStyle = '#222';
+    g.font = 'bold 44px serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('佐渡金山', 128, 50);
+    return c;
+  },
+  sadoSign() {
+    const [c, g] = canvas(256, 96);
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 256, 96);
+    g.fillStyle = '#1c7ed6';
+    g.fillRect(0, 0, 256, 14);
+    g.fillRect(0, 82, 256, 14);
+    g.fillStyle = '#222';
+    g.font = 'bold 40px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('ようこそ さどへ', 128, 50);
+    return c;
+  },
+  taiko() {
+    const [c, g] = canvas(128, 64);
+    g.fillStyle = '#8a3b1e';
+    g.fillRect(0, 0, 128, 64);
+    for (let x = 0; x < 128; x += 16) {
+      g.fillStyle = 'rgba(0,0,0,.2)';
+      g.fillRect(x, 0, 2, 64);
+    }
+    g.fillStyle = '#d9c39a';
+    g.fillRect(0, 0, 128, 7);
+    g.fillRect(0, 57, 128, 7);
+    g.fillStyle = '#222';
+    for (let x = 4; x < 128; x += 8) {
+      g.beginPath();
+      g.arc(x, 10, 2, 0, Math.PI * 2);
+      g.arc(x, 54, 2, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+  drumSkin() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#efe2c4';
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = 'rgba(120,80,40,.25)';
+    g.beginPath();
+    g.arc(32, 32, 14, 0, Math.PI * 2);
+    g.fill();
+    return c;
+  },
+
   // ----- うちゅう -----
   moonGround() {
     const [c, g] = canvas(256, 256);

@@ -10,6 +10,8 @@ const STYLES = {
   blocks: { top: '#5d8ff2', mid: '#93bbff', bottom: '#d8e6ff', cloud: ['#ffffff'], shape: 'block' },
   sea: { top: '#bff3ff', mid: '#3d9fd0', bottom: '#14527e', cloud: ['#e8fbff'], shape: 'wave' },
   city: { top: '#3a86d8', mid: '#9cd0f5', bottom: '#f2f8ff', cloud: ['#ffffff', '#f1f3f5'], shape: 'puff' },
+  island: { top: '#1f8fe0', mid: '#7fd0ff', bottom: '#e9fbff', cloud: ['#ffffff'], shape: 'puff' },
+  sado: { top: '#3f7fc8', mid: '#a6cdea', bottom: '#eef4f8', cloud: ['#ffffff', '#eef1f4'], shape: 'puff' },
   space: { top: '#03040c', mid: '#0b0d24', bottom: '#14163a', cloud: ['#ffffff'], shape: 'stars' },
 };
 

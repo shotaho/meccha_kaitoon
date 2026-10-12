@@ -131,7 +131,7 @@ export function buildWorld(scene, mapId) {
   }
 
   const kit = { group, box, plate, plant, add, cyl, sphere, deco, mat, lights, colliders, meshes, bounds };
-  const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy, city: buildCity, space: buildSpace };
+  const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy, city: buildCity, space: buildSpace, island: buildIsland, sado: buildSado };
   (builders[mapId] || buildHouse)(kit);
 
   scene.background = new THREE.Color(def.sky || (def.outdoor ? '#9fd3f5' : '#222222'));
@@ -867,6 +867,286 @@ function buildSpace(k) {
   group.add(ringed);
 
   k.lights('#b8c4ff', '#3a3a48', 1.0, 2.4);
+}
+
+// ---------------------------------------------------------------------------
+// 島のステージで使う海・トキ
+// ---------------------------------------------------------------------------
+
+// ステージのまわりの海（飾り）。y は地面より少しだけ下
+function ocean(k, y = -0.03) {
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ map: tex('water', 60, 60), color: '#9fe3ff' }));
+  sea.rotation.x = -Math.PI / 2;
+  k.deco(sea, 0, y, 0);
+}
+
+// あさい水（歩ける）
+function shallow(k, x0, x1, z0, z1, y = 0.012) {
+  const w = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshLambertMaterial({ map: tex('water', (x1 - x0) / 4, (z1 - z0) / 4), transparent: true, opacity: 0.85, color: '#bfefff' }));
+  w.rotation.x = -Math.PI / 2;
+  k.deco(w, (x0 + x1) / 2, y, (z0 + z1) / 2);
+}
+
+// トキ（飾り）
+function toki(k, x, y, z, rot = 0) {
+  const g = new THREE.Group();
+  const body = new THREE.MeshLambertMaterial({ color: '#f8e3dc' });
+  const wing = new THREE.MeshLambertMaterial({ color: '#f2b8ae' });
+  const red = new THREE.MeshLambertMaterial({ color: '#e03131' });
+  const black = new THREE.MeshLambertMaterial({ color: '#222222' });
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), body);
+  b.scale.set(0.8, 0.8, 1.4);
+  b.position.y = 0.42;
+  const w1 = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8), wing);
+  w1.scale.set(0.9, 0.5, 1.3);
+  w1.position.set(0, 0.48, -0.05);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), red);
+  head.position.set(0, 0.62, 0.26);
+  const crest = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), body);
+  crest.position.set(0, 0.66, 0.2);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.28, 8), black);
+  beak.rotation.x = Math.PI / 2 + 0.5;
+  beak.position.set(0, 0.55, 0.42);
+  g.add(b, w1, head, crest, beak);
+  for (const sx of [-0.06, 0.06]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 4), red);
+    leg.position.set(sx, 0.15, 0);
+    g.add(leg);
+  }
+  g.rotation.y = rot;
+  k.deco(g, x, y, z);
+}
+
+// ---------------------------------------------------------------------------
+// むじんとう
+// ---------------------------------------------------------------------------
+
+function buildIsland(k) {
+  const { box, cyl, sphere, deco, add, mat } = k;
+  const { x0: X0, x1: X1, z0: Z0, z1: Z1 } = k.bounds;
+  const T = 0.5;
+  box(X0 - T, X1 + T, -T, 0, Z0 - T, Z1 + T, { tex: 'seaSand', tile: 3 }, false);
+  ocean(k);
+  shallow(k, X0 - T, X1 + T, 10.6, Z1 + T);
+
+  // ヤシの木
+  const leafMat = mat('palmLeaf', 1, 1);
+  leafMat.side = THREE.DoubleSide;
+  function palm(x, z, h, lean = 0.25, dir = 0) {
+    const n = 6;
+    let px = x;
+    let pz = z;
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      const off = lean * t * t * h;
+      const nx = x + Math.sin(dir) * off;
+      const nz = z + Math.cos(dir) * off;
+      const seg = add(new THREE.Mesh(new THREE.CylinderGeometry(0.2 - 0.05 * t, 0.24 - 0.05 * t, h / n + 0.05, 10), mat('palmTrunk', 1, 1)), (px + nx) / 2, (h / n) * (i + 0.5), (pz + nz) / 2);
+      seg.rotation.set(Math.cos(dir) * lean * 0.5 * t, 0, -Math.sin(dir) * lean * 0.5 * t);
+      px = nx;
+      pz = nz;
+    }
+    k.colliders.push({ x0: x - 0.25, x1: x + 0.25, y0: 0, y1: h * 0.6, z0: z - 0.25, z1: z + 0.25 });
+    for (let i = 0; i < 8; i++) {
+      const geo = new THREE.PlaneGeometry(0.7, 2.6);
+      geo.translate(0, 1.3, 0);
+      const leaf = new THREE.Mesh(geo, leafMat);
+      leaf.rotation.x = -Math.PI / 2 - (0.35 + (i % 2) * 0.3);
+      const g = new THREE.Group();
+      g.add(leaf);
+      g.rotation.y = (i / 8) * Math.PI * 2;
+      deco(g, px, h, pz);
+    }
+    for (let i = 0; i < 3; i++) deco(new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), mat(null, 1, 1, '#6b4a24')), px + Math.cos(i * 2.1) * 0.25, h - 0.2, pz + Math.sin(i * 2.1) * 0.25);
+  }
+  palm(-8, 2, 4.5, 0.3, 0.5);
+  palm(6, -2, 5, 0.25, -2);
+  palm(-14, 10, 4.2, 0.35, 2.5);
+  palm(16, 8, 4.8, 0.3, -1);
+  palm(-3, -12.5, 4.6, 0.2, 1);
+  palm(10, 4, 4, 0.3, 3);
+  palm(-16, -4, 4.4, 0.25, 0.3);
+
+  // ほったて小屋（竹のかべ・わらの屋根）。にもつとたるから屋根にのぼれる
+  const bam = { tex: 'bamboo', tile: 1.5 };
+  box(-4, 2, 0, 2.6, -10, -9.8, bam);
+  box(-4, -3.8, 0, 2.6, -9.8, -5, bam);
+  box(1.8, 2, 0, 2.6, -9.8, -5, bam);
+  box(-4, -2, 0, 2.6, -5.2, -5, bam);
+  box(0, 2, 0, 2.6, -5.2, -5, bam);
+  box(-2, 0, 2.0, 2.6, -5.2, -5, bam);
+  box(-4.6, 2.6, 2.6, 3.2, -10.6, -4.4, { tex: 'thatch', tile: 1.5 });
+  box(-3.6, -2.4, 0, 0.7, -9.6, -8.6, { tex: 'crate', tile: 0.7 });
+  box(2.7, 3.9, 0, 2.2, -7.5, -6.3, { tex: 'crate', tile: 1.1 });
+  cyl(3.3, -4.3, 0.45, 1.0, 0, { tex: 'wood', color: '#9a6a3a', rx: 2 }, true, 16);
+
+  // がけ（ジャンプでのぼれる）
+  const rockSpec = { tex: 'rock', tile: 2, color: '#f5e9cf' };
+  box(-18, -10, 0, 1.2, -14, -8, rockSpec);
+  box(-18, -12, 1.2, 2.4, -14, -10, rockSpec);
+  box(-18, -14.5, 2.4, 3.6, -14, -12, rockSpec);
+
+  // こわれたボート・いかだ
+  const hull = { tex: 'shipHull', tile: 1 };
+  box(6.5, 9.5, 0, 0.3, 8, 10, hull);
+  box(6.5, 9.5, 0.3, 0.9, 7.8, 8, hull);
+  box(6.5, 9.5, 0.3, 0.9, 10, 10.2, hull);
+  box(6.3, 6.5, 0.3, 0.9, 7.8, 10.2, hull);
+  box(9.5, 9.7, 0.3, 0.9, 7.8, 10.2, hull);
+  box(-11.5, -8.5, 0, 0.35, 8, 10, { tex: 'palmTrunk', tile: 0.6 });
+
+  // 大きな岩・たからばこ
+  sphere(12, 0, -8, 2.2, { tex: 'rock', color: '#a39a8a' }, true, 0.7);
+  sphere(15, 0, 4, 1.5, { tex: 'rock', color: '#a39a8a' }, true, 0.8);
+  box(13.8, 15.2, 0, 0.9, -11.6, -10.8, { tex: 'chest', stretch: true });
+
+  // たき火
+  for (let i = 0; i < 8; i++) deco(new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), mat('rock', 1, 1, '#888888')), Math.cos(i * 0.785) * 0.6, 0.1, 2 + Math.sin(i * 0.785) * 0.6);
+  for (const a of [0.3, 1.9]) {
+    const log = deco(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.0, 8), mat('wood', 1, 1, '#6b4a24')), 0, 0.12, 2);
+    log.rotation.set(Math.PI / 2, 0, a);
+  }
+  const fire = deco(new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 10), new THREE.MeshBasicMaterial({ color: '#ff8c1a' })), 0, 0.45, 2);
+  void fire;
+  k.colliders.push({ x0: -0.7, x1: 0.7, y0: 0, y1: 0.35, z0: 1.3, z1: 2.7 });
+
+  // すなにかいた SOS（石）
+  const stone = mat('rock', 1, 1, '#9a9a9a');
+  const dot = (x, z) => deco(new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), stone), x, 0.08, z);
+  const S = (ox) => {
+    for (let i = 0; i <= 8; i++) {
+      const t = (i / 8) * Math.PI * 1.5;
+      dot(ox + Math.cos(t + Math.PI / 2) * 0.5, -6.5 + Math.sin(t + Math.PI / 2) * 0.5);
+      dot(ox - Math.cos(t + Math.PI / 2) * 0.5, -5.5 - Math.sin(t + Math.PI / 2) * 0.5);
+    }
+  };
+  S(6);
+  for (let i = 0; i < 14; i++) dot(8.5 + Math.cos((i / 14) * Math.PI * 2) * 0.6, -6 + Math.sin((i / 14) * Math.PI * 2) * 1.0);
+  S(11);
+  // ココナッツの山・びん
+  for (let i = 0; i < 5; i++) deco(new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), mat(null, 1, 1, '#6b4a24')), -6.5 + (i % 3) * 0.3, 0.17 + Math.floor(i / 3) * 0.25, -1 + (i % 2) * 0.2);
+  const bottle = deco(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.3, 10), new THREE.MeshLambertMaterial({ color: '#7fd18b', transparent: true, opacity: 0.8 })), 3, 0.06, 11);
+  bottle.rotation.z = Math.PI / 2;
+
+  k.lights('#e9fbff', '#d6c49a', 1.6, 2.0);
+}
+
+// ---------------------------------------------------------------------------
+// さどがしま
+// ---------------------------------------------------------------------------
+
+function buildSado(k) {
+  const { box, plate, plant, cyl, sphere, deco, add, mat } = k;
+  const { x0: X0, x1: X1, z0: Z0, z1: Z1, h: HB } = k.bounds;
+  const T = 0.5;
+  // 屋根の上には行けないように、当たり判定を天井までのばす
+  const cap = (x0, x1, y0, z0, z1) => k.colliders.push({ x0, x1, y0, y1: HB + 1, z0, z1 });
+
+  box(X0 - T, X1 + T, -T, 0, Z0 - T, Z1 + T, { tex: 'lawn', tile: 3 }, false);
+  ocean(k);
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0 + 1, 9.5), mat('seaSand', 12, 3));
+  sand.rotation.x = -Math.PI / 2;
+  deco(sand, 0, 0.006, 10.75);
+  shallow(k, X0 - T, X1 + T, 8, Z1 + T);
+
+  // 佐渡金山（がけとトンネル）
+  const cliff = { tex: 'rock', tile: 2, color: '#9a8f80' };
+  box(-20, -15.2, 0, 9, -15, -9, cliff);
+  box(-12.8, -8, 0, 9, -15, -9, cliff);
+  box(-15.2, -12.8, 2.8, 9, -15, -9, cliff);
+  box(-15.2, -12.8, 0, 2.8, -15, -14, { color: '#2b2622' });
+  const timber = { tex: 'wood', tile: 0.5, color: '#6b4a2b' };
+  box(-15.3, -15.0, 0, 2.9, -9.1, -8.8, timber);
+  box(-13.0, -12.7, 0, 2.9, -9.1, -8.8, timber);
+  box(-15.3, -12.7, 2.6, 2.9, -9.1, -8.8, timber);
+  plate(-10.4, 3.4, -8.98, 2.6, 0.95, '+z', 'kinzanSign');
+  const railMat = mat(null, 1, 1, '#555a60');
+  for (const x of [-14.45, -13.55]) deco(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 9), railMat), x, 0.03, -9.5);
+  for (let z = -13.8; z < -5; z += 0.7) deco(new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.15), mat('wood', 1, 1, '#5a3b20')), -14, 0.02, z);
+  box(-14.6, -13.4, 0.2, 1.0, -8, -6.6, { color: '#6b4f3a' });
+  k.colliders.push({ x0: -14.6, x1: -13.4, y0: 0, y1: 0.2, z0: -8, z1: -6.6 });
+  for (let i = 0; i < 6; i++) deco(new THREE.Mesh(new THREE.DodecahedronGeometry(0.2), mat('goldOre', 1, 1)), -14.3 + (i % 3) * 0.3, 1.05, -7.6 + Math.floor(i / 3) * 0.5);
+  deco(new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffd8a0' })), -14, 2.4, -12);
+  sphere(-17.5, 0, -7.5, 1.0, { tex: 'goldOre', rx: 2 }, true, 0.7);
+  sphere(-9, 0, -6.8, 0.7, { tex: 'goldOre', rx: 2 }, true, 0.7);
+
+  // たなだ（だんだんの田んぼ。歩いてのぼれる）
+  for (let i = 0; i < 6; i++) {
+    const z1 = -4 - 1.8 * i;
+    const z0 = i === 5 ? -15 : -4 - 1.8 * (i + 1);
+    box(8, 20, 0, 0.4 * (i + 1), z0, z1, { tex: 'dirt', tile: [1.5, 0.4], faces: { '+y': { tex: 'ricePaddy', tile: 2 } } });
+  }
+  // はさがけ（いねをほす）
+  for (const x of [9.5, 11, 12.5]) cyl(x, -10.3, 0.07, 2.0, 1.6, { tex: 'wood', color: '#7a5230' }, true, 8);
+  for (const y of [2.6, 3.2]) box(9.4, 12.6, y, y + 0.1, -10.35, -10.25, { tex: 'wood', color: '#7a5230' });
+  const ine = mat('thatch', 1, 1, '#e8c96a');
+  for (let x = 9.7; x < 12.4; x += 0.35) for (const y of [2.3, 2.9]) deco(new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.35), ine), x, y, -10.3);
+  // かかし
+  cyl(17, -6.7, 0.05, 1.6, 0.8, { tex: 'wood', color: '#7a5230' }, true, 6);
+  deco(new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.08), mat('wood', 1, 1, '#7a5230')), 17, 1.9, -6.7);
+  deco(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.25), mat(null, 1, 1, '#3b6fb0')), 17, 1.75, -6.7);
+  deco(new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), mat('thatch', 1, 1, '#f0e0b0')), 17, 2.3, -6.7);
+  deco(new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.25, 16), mat('thatch', 1, 1)), 17, 2.55, -6.7);
+
+  // 宿根木のような木の家
+  box(-19, -11, 0, 4.2, -5, 3, { tex: 'sadoWood', tile: 2 });
+  plate(-10.98, 1.1, 1, 1.4, 2.2, '+x', 'doorPanel');
+  plate(-10.98, 2.6, -2.5, 2.4, 1.2, '+x', 'window');
+  box(-19.4, -10.6, 4.2, 4.8, -5.4, 3.4, { tex: 'kawara', tile: 1, faces: { '-y': { tex: 'sadoWood', tile: 2 } } });
+  cap(-19.4, -10.6, 4.2, -5.4, 3.4);
+  // いど
+  cyl(-8, 6, 0.7, 0.8, 0, { tex: 'concrete', color: '#b8b2a6', rx: 3 }, true, 20);
+  for (const x of [-8.65, -7.35]) cyl(x, 6, 0.05, 1.6, 0.8, { tex: 'wood', color: '#6b4a2b' }, false, 6);
+  box(-8.9, -7.1, 2.4, 2.5, 5.5, 6.5, { tex: 'kawara', tile: 1 });
+
+  // のうぶたい（おにだいこ）
+  box(-4, 3, 0, 0.9, -13, -7, { tex: 'wood', tile: 1, color: '#8a6a45', faces: { '+y': { tex: 'woodFloor', tile: 2.4 } } });
+  box(-1.5, 0.5, 0, 0.45, -7, -6.4, { tex: 'wood', tile: 1, color: '#8a6a45' });
+  for (const [x, z] of [[-3.7, -7.3], [2.7, -7.3], [-3.7, -12.6], [2.7, -12.6]]) cyl(x, z, 0.15, 3.3, 0.9, { tex: 'wood', color: '#6b4a2b' }, true, 12);
+  box(-4, 3, 0.9, 4.2, -13, -12.8, { tex: 'sadoWood', tile: 2, faces: { '+z': { tex: 'pinePanel', stretch: true } } });
+  box(-4.5, 3.5, 4.2, 4.8, -13.5, -6.5, { tex: 'kawara', tile: 1, faces: { '-y': { tex: 'wood', tile: 1, color: '#6b4a2b' } } });
+  cap(-4.5, 3.5, 4.2, -13.5, -6.5);
+  box(-1.1, 0.1, 0.9, 1.15, -10.1, -9.5, { tex: 'wood', tile: 0.5, color: '#5a3b20' });
+  const drum = add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.9, 28), [mat('taiko', 3, 1), mat('drumSkin', 1, 1), mat('drumSkin', 1, 1)]), -0.5, 1.75, -9.8);
+  drum.rotation.z = Math.PI / 2;
+  k.colliders.push({ x0: -0.95, x1: -0.05, y0: 1.15, y1: 2.35, z0: -10.4, z1: -9.2 });
+  // 石どうろう
+  box(4.7, 5.3, 0, 0.3, -6.3, -5.7, { tex: 'concrete', tile: 1, color: '#b8b2a6' });
+  cyl(5, -6, 0.12, 0.8, 0.3, { tex: 'concrete', color: '#b8b2a6' }, true, 10);
+  box(4.75, 5.25, 1.1, 1.5, -6.25, -5.75, { tex: 'concrete', tile: 1, color: '#d8d0c0' });
+  deco(new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.35, 4), mat('concrete', 1, 1, '#b8b2a6')), 5, 1.68, -6).rotation.y = Math.PI / 4;
+
+  // かき（おけさがき）の木・まつ
+  plant(2, 2, 1.3, 1.6);
+  const kaki = mat(null, 1, 1, '#f28c28');
+  for (let i = 0; i < 12; i++) {
+    const a = i * 2.4;
+    const yy = 2.1 + (i % 3) * 0.35;
+    deco(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), kaki), 2 + Math.cos(a) * 0.95, yy, 2 + Math.sin(a) * 0.95);
+  }
+  plant(-14, 7, 1.2, 1.8);
+  plant(16, 4, 1.2, 1.8);
+
+  // さんばし・たらいぶね
+  box(4, 6, 0, 0.3, 8, 14.5, { tex: 'wood', tile: 0.8, color: '#9a7a55' });
+  const inner = mat(null, 1, 1, '#5a3b20');
+  for (const [x, z] of [[-6, 11], [-2, 13], [10, 11.5], [14, 9.5]]) {
+    cyl(x, z, 0.85, 0.55, 0, { tex: 'wood', color: '#b07a45', rx: 3 }, true, 24);
+    deco(new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.02, 24), inner), x, 0.56, z);
+    deco(new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.04, 6, 28), mat(null, 1, 1, '#3b2a1a')), x, 0.42, z).rotation.x = Math.PI / 2;
+  }
+  // かんばん
+  plate(0, 1.8, 7.5, 2.4, 0.9, '+z', 'sadoSign');
+  for (const x of [-1.1, 1.1]) cyl(x, 7.5, 0.06, 1.35, 0, { tex: 'wood', color: '#6b4a2b' }, true, 8);
+
+  // トキ
+  toki(k, 11, 0.4, -5.2, 0.3);
+  toki(k, 15, 1.2, -8.5, -2);
+  toki(k, 2, 3.75, 2, 1);
+  toki(k, -9, 0.02, 9.6, 2.5);
+  toki(k, 0.5, 4.8, -10, -0.7);
+
+  k.lights('#e6f4ff', '#8a9a6a', 1.6, 1.8);
 }
 
 // ---------------------------------------------------------------------------
