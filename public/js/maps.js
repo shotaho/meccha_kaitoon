@@ -478,6 +478,43 @@ MAPS.sado = {
     [-14, 0, -12], [-2.5, 0.9, -10], [0, 0, -5], [11, 0.4, -5], [14, 1.2, -9], [17, 2.4, -14], [8, 0, 11], [-3, 0, 9], [16, 0, 12]],
 };
 
+// 100えんショップ（プレイヤーとおなじ形のお客さんがいる）
+MAPS.shop = {
+  name: '100えんショップ',
+  outdoor: false,
+  sky: '#dfe6ec',
+  bounds: { x0: -12, x1: 12, z0: -10, z1: 10, h: 3.4 },
+  seekerSpawn: [10, 0, 9],
+  seekerLook: 0,
+  hiderSpawn: { c: [-2, 7.5], rx: 3, rz: 1 },
+  spots: [
+    { p: [-7.3, 0, -2], yaw: E, pose: 'stand' },
+    { p: [-4.7, 0, 1], yaw: W, pose: 'crouch' },
+    { p: [0.7, 0, -4], yaw: E, pose: 'star' },
+    { p: [4.7, 0, 2], yaw: E, pose: 'stand' },
+    { p: [-6, 0, -9.25], yaw: N, pose: 'stand' },
+    { p: [-11.25, 0, 4], yaw: E, pose: 'stand' },
+    { p: [11.25, 0, -6], yaw: W, pose: 'banzai' },
+    { p: [6, 0, 5.75], yaw: S, pose: 'stand' },
+    { p: [0, 0, -6.75], yaw: S, pose: 'crouch', view: [0, 1.6, -9.2] },
+    { p: [7.8, 0, -2.55], yaw: N, pose: 'crouch' },
+  ],
+  // お客さん { p, yaw, pose, basket }
+  customers: [
+    { p: [-10, 0, -3], yaw: W, pose: 'stand', basket: true },
+    { p: [-6, 0, 1.2], yaw: E, pose: 'stand' },
+    { p: [-2, 0, -4.5], yaw: W, pose: 'crouch' },
+    { p: [2, 0, -1.5], yaw: E, pose: 'stand', basket: true },
+    { p: [6.2, 0, -5.5], yaw: W, pose: 'stand' },
+    { p: [7, 0, 7.8], yaw: S, pose: 'stand', basket: true },
+    { p: [10, 0, -8.6], yaw: S, pose: 'crouch' },
+    { p: [-9, 0, 8], yaw: N, pose: 'stand' },
+    { p: [-2, 0, 4.6], yaw: S, pose: 'stand' },
+  ],
+  nav: [[-10, 0, -7], [-10, 0, 0], [-10, 0, 5], [-6, 0, -7], [-6, 0, -1], [-6, 0, 5], [-2, 0, -7], [-2, 0, 0], [-2, 0, 6.5],
+    [2, 0, -7], [2, 0, 1], [2, 0, 5], [6, 0, -7.5], [6, 0, 0], [9, 0, -6], [10, 0, 4], [5, 0, 8.6], [-5, 0, 8.5], [9.6, 0, 8.6]],
+};
+
 export const MAP_IDS = Object.keys(MAPS);
 
 // 地面の高さ（ブロックの世界以外は 0）

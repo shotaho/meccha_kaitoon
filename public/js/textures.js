@@ -1805,6 +1805,69 @@ const GEN = {
     return c;
   },
 
+  // ----- 100円ショップ -----
+  goodsKitchen: () => goodsShelf(801, 'kitchen'),
+  goodsToy: () => goodsShelf(802, 'toy'),
+  goodsStationery: () => goodsShelf(803, 'stationery'),
+  goodsClean: () => goodsShelf(804, 'clean'),
+  goodsSnack: () => goodsShelf(805, 'snack'),
+  shopFloor() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(806);
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 2; x++) {
+        g.fillStyle = hsl(40, 10, 88 + r() * 6);
+        g.fillRect(x * 64, y * 64, 64, 64);
+        g.strokeStyle = 'rgba(0,0,0,.12)';
+        g.strokeRect(x * 64 + 0.5, y * 64 + 0.5, 63, 63);
+      }
+    }
+    for (let i = 0; i < 80; i++) {
+      g.fillStyle = 'rgba(0,0,0,.05)';
+      g.fillRect(r() * 128, r() * 128, 2, 2);
+    }
+    return c;
+  },
+  shopWall() {
+    const [c, g] = canvas(64, 128);
+    g.fillStyle = '#fbfbf8';
+    g.fillRect(0, 0, 64, 128);
+    g.fillStyle = '#e8590c';
+    g.fillRect(0, 96, 64, 10);
+    g.fillStyle = '#ffd43b';
+    g.fillRect(0, 106, 64, 6);
+    return c;
+  },
+  sign100() {
+    const [c, g] = canvas(512, 128);
+    g.fillStyle = '#e03131';
+    g.fillRect(0, 0, 512, 128);
+    g.fillStyle = '#ffd43b';
+    g.fillRect(8, 8, 496, 112);
+    g.fillStyle = '#e03131';
+    g.font = 'bold 64px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('100円ショップ', 256, 66);
+    return c;
+  },
+  catKitchen: () => catSign('だいどころ', '#2b8a3e'),
+  catToy: () => catSign('おもちゃ', '#e8590c'),
+  catStationery: () => catSign('ぶんぼうぐ', '#1c7ed6'),
+  catClean: () => catSign('そうじ', '#7048e8'),
+  catSnack: () => catSign('おかし', '#d6336c'),
+  pop100() {
+    const [c, g] = canvas(128, 64);
+    g.fillStyle = '#ffd43b';
+    g.fillRect(0, 0, 128, 64);
+    g.fillStyle = '#e03131';
+    g.font = 'bold 40px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('¥100', 64, 34);
+    return c;
+  },
+
   // ----- うちゅう -----
   moonGround() {
     const [c, g] = canvas(256, 256);
@@ -1943,6 +2006,72 @@ const GEN = {
   },
 
 };
+
+// 100円ショップのたな（4だんに商品がならぶ）
+function goodsShelf(seed, kind) {
+  const [c, g] = canvas(512, 256);
+  const r = rng(seed);
+  g.fillStyle = '#f1f3f5';
+  g.fillRect(0, 0, 512, 256);
+  const rowH = 64;
+  for (let row = 0; row < 4; row++) {
+    const y1 = row * rowH + rowH - 8;
+    let x = 4;
+    while (x < 500) {
+      const w = 14 + r() * 26;
+      const h = 20 + r() * 30;
+      const col = hsl(r() * 360, 55 + r() * 30, 45 + r() * 25);
+      g.fillStyle = col;
+      if (kind === 'kitchen' && r() < 0.5) {
+        // おわん・コップ
+        g.beginPath();
+        g.moveTo(x, y1 - h);
+        g.lineTo(x + w, y1 - h);
+        g.lineTo(x + w * 0.8, y1);
+        g.lineTo(x + w * 0.2, y1);
+        g.fill();
+      } else if ((kind === 'clean' || kind === 'snack') && r() < 0.5) {
+        // ボトル・ふくろ
+        g.fillRect(x + w * 0.2, y1 - h, w * 0.6, h);
+        g.fillRect(x + w * 0.35, y1 - h - 8, w * 0.3, 8);
+      } else if (kind === 'toy' && r() < 0.4) {
+        g.beginPath();
+        g.arc(x + w / 2, y1 - w / 2, w / 2, 0, Math.PI * 2);
+        g.fill();
+      } else if (kind === 'stationery' && r() < 0.5) {
+        for (let i = 0; i < 4; i++) {
+          g.fillStyle = hsl(r() * 360, 70, 55);
+          g.fillRect(x + i * (w / 4), y1 - h, w / 4 - 1, h);
+        }
+      } else {
+        g.fillRect(x, y1 - h, w, h);
+        g.fillStyle = 'rgba(255,255,255,.75)';
+        g.fillRect(x + 3, y1 - h + 5, w - 6, 6);
+      }
+      x += w + 3 + r() * 4;
+    }
+    // たないた・ねふだ
+    g.fillStyle = '#adb5bd';
+    g.fillRect(0, y1, 512, 8);
+    for (let px = 20; px < 512; px += 64) {
+      g.fillStyle = '#ffd43b';
+      g.fillRect(px, y1 + 1, 18, 6);
+    }
+  }
+  return c;
+}
+
+function catSign(text, color) {
+  const [c, g] = canvas(256, 64);
+  g.fillStyle = color;
+  g.fillRect(0, 0, 256, 64);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 36px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 128, 34);
+  return c;
+}
 
 // 食べ物のイラスト（ロゴではない簡単な絵）
 function drawFood(g, kind, cx, cy, s) {

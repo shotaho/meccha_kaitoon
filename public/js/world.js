@@ -1,10 +1,11 @@
 // ステージを組み立てる。ステージの種類は maps.js（共通データ）と対応する。
 
 import * as THREE from 'three';
-import { tex } from './textures.js';
+import { tex, rng } from './textures.js';
 import { MAPS, genBlocks, BLOCKS } from './maps.js';
 import { blockMaterials } from './blocktex.js';
 import { buildSky } from './sky.js';
+import { Character, POSES } from './character.js';
 
 const FACE_DIRS = ['+x', '-x', '+y', '-y', '+z', '-z'];
 
@@ -131,7 +132,7 @@ export function buildWorld(scene, mapId) {
   }
 
   const kit = { group, box, plate, plant, add, cyl, sphere, deco, mat, lights, colliders, meshes, bounds };
-  const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy, city: buildCity, space: buildSpace, island: buildIsland, sado: buildSado };
+  const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy, city: buildCity, space: buildSpace, island: buildIsland, sado: buildSado, shop: buildShop };
   (builders[mapId] || buildHouse)(kit);
 
   scene.background = new THREE.Color(def.sky || (def.outdoor ? '#9fd3f5' : '#222222'));
@@ -1147,6 +1148,139 @@ function buildSado(k) {
   toki(k, 0.5, 4.8, -10, -0.7);
 
   k.lights('#e6f4ff', '#8a9a6a', 1.6, 1.8);
+}
+
+// ---------------------------------------------------------------------------
+// 100えんショップ
+// ---------------------------------------------------------------------------
+
+// プレイヤーとおなじ体のお客さん（うごかない。撃つとはずれになる）
+function customer(k, c, seed) {
+  const r = rng(seed);
+  const ch = new Character({ id: 'npc' + seed, kind: 'hider', name: '' });
+  const pick = (a) => a[Math.floor(r() * a.length)];
+  const skin = pick(['#f5d0b0', '#e9b48f', '#c98d63', '#f9dcc4']);
+  const hair = pick(['#2b1d14', '#4a2e1a', '#1b1b1b', '#7a4b26', '#9a9a9a', '#c8a165']);
+  const shirt = pick(['#e03131', '#1c7ed6', '#2b8a3e', '#f08c00', '#7048e8', '#ffffff', '#f783ac', '#ffd43b', '#495057', '#15aabf']);
+  const pants = pick(['#1e3a5f', '#343a40', '#5c4033', '#868e96', '#2f4f4f', '#e9ecef']);
+  const fill = (i, col) => {
+    const pt = ch.paint[i];
+    pt.ctx.fillStyle = col;
+    pt.ctx.fillRect(0, 0, pt.size, pt.size);
+  };
+  fill(0, shirt);
+  fill(2, shirt);
+  fill(3, shirt);
+  fill(4, pants);
+  fill(5, pants);
+  // かお（球の u=0.25 が正面）
+  const hd = ch.paint[1];
+  const S = hd.size;
+  const g = hd.ctx;
+  g.fillStyle = skin;
+  g.fillRect(0, 0, S, S);
+  g.fillStyle = hair;
+  g.fillRect(0, 0, S, S * 0.3);
+  g.beginPath();
+  g.ellipse(S * 0.75, S * 0.3, S * 0.3, S * (r() < 0.5 ? 0.32 : 0.18), 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#222';
+  for (const dx of [-0.035, 0.035]) {
+    g.beginPath();
+    g.ellipse(S * (0.25 + dx), S * 0.47, S * 0.012, S * 0.03, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.strokeStyle = '#a5523a';
+  g.lineWidth = S * 0.012;
+  g.beginPath();
+  g.arc(S * 0.25, S * 0.56, S * 0.025, 0.2, Math.PI - 0.2);
+  g.stroke();
+  for (const p of ch.paint) p.tex.needsUpdate = true;
+  for (const m of ch.parts) {
+    m.userData = {};
+    k.meshes.push(m);
+  }
+  ch.pose = POSES[c.pose] ? c.pose : 'stand';
+  ch.poseNow = structuredClone(POSES[ch.pose]);
+  ch.applyPose();
+  ch.root.position.set(c.p[0], c.p[1], c.p[2]);
+  ch.root.rotation.y = c.yaw;
+  if (c.basket) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.22, 0.28), new THREE.MeshLambertMaterial({ color: '#e03131' }));
+    b.position.set(-0.36, 0.62, 0.08);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.015, 6, 16, Math.PI), b.material);
+    handle.position.y = 0.11;
+    b.add(handle);
+    ch.root.add(b);
+  }
+  if (ch.label) ch.label.visible = false;
+  k.group.add(ch.root);
+  const hgt = ch.pose === 'crouch' ? 1.3 : 1.75;
+  k.colliders.push({ x0: c.p[0] - 0.3, x1: c.p[0] + 0.3, y0: c.p[1], y1: c.p[1] + hgt, z0: c.p[2] - 0.3, z1: c.p[2] + 0.3 });
+}
+
+function buildShop(k) {
+  const { box, plate, cyl, deco, mat } = k;
+  const { x0: X0, x1: X1, z0: Z0, z1: Z1, h: H } = k.bounds;
+  const T = 0.5;
+  const cap = (x0, x1, y0, z0, z1) => k.colliders.push({ x0, x1, y0, y1: H + 1, z0, z1 });
+
+  // 床・天井・かべ
+  box(X0 - T, X1 + T, -T, 0, Z0 - T, Z1 + T, { tex: 'shopFloor', tile: 1.2 }, false);
+  box(X0 - T, X1 + T, H, H + T, Z0 - T, Z1 + T, { tex: 'ceiling', tile: 1.2 }, false);
+  const wall = { tex: 'shopWall', tile: [1, H] };
+  box(X0 - T, X1 + T, 0, H, Z0 - T, Z0, wall);
+  box(X0 - T, X0, 0, H, Z0, Z1, wall);
+  box(X1, X1 + T, 0, H, Z0, Z1, wall);
+  box(X0 - T, 0, 0, H, Z1, Z1 + T, { ...wall, faces: { '-z': { tex: 'shopWindow', tile: [3, H] } } });
+  box(3, X1 + T, 0, H, Z1, Z1 + T, { ...wall, faces: { '-z': { tex: 'shopWindow', tile: [3, H] } } });
+  box(0, 3, 0, H, Z1, Z1 + T, { tex: 'glassDark', tile: 1.5 }); // 自動ドア
+  // 天井のあかり（飾り）
+  const lamp = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+  for (let x = -8; x <= 8; x += 4) for (let z = -7; z <= 7; z += 3.5) deco(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 0.3), lamp), x, H - 0.03, z);
+
+  // かべのたな
+  const shelfBody = { tex: 'stainless', tile: 1, color: '#e9ecef' };
+  box(-11.5, 11.5, 0, 2.2, Z0, -9.5, { ...shelfBody, faces: { '+z': { tex: 'goodsSnack', tile: [2.5, 2.2] } } });
+  cap(-11.5, 11.5, 2.2, Z0, -9.5);
+  box(X0, -11.5, 0, 2.2, -9.5, 6, { ...shelfBody, faces: { '+x': { tex: 'goodsKitchen', tile: [2.5, 2.2] } } });
+  cap(X0, -11.5, 2.2, -9.5, 6);
+  box(11.5, X1, 0, 2.2, -9.5, 2, { ...shelfBody, faces: { '-x': { tex: 'goodsClean', tile: [2.5, 2.2] } } });
+  cap(11.5, X1, 2.2, -9.5, 2);
+  plate(0, 2.8, -9.48, 4.4, 0.85, '+z', 'sign100');
+
+  // まんなかのたな（りょうめん）。上には行けない
+  const kinds = [['goodsKitchen', 'goodsSnack', 'catKitchen'], ['goodsToy', 'goodsStationery', 'catToy'], ['goodsStationery', 'goodsClean', 'catStationery'], ['goodsClean', 'goodsKitchen', 'catClean']];
+  [-8, -4, 0, 4].forEach((x, i) => {
+    const [a, b, sign] = kinds[i];
+    box(x - 0.45, x + 0.45, 0, 1.8, -6.5, 3.5, { ...shelfBody, faces: { '-x': { tex: a, tile: [2.5, 1.8] }, '+x': { tex: b, tile: [2.5, 1.8] }, '+z': { tex: 'goodsToy', tile: [0.9, 1.8] } } });
+    cap(x - 0.45, x + 0.45, 1.8, -6.5, 3.5);
+    // ぶらさがりかんばん
+    const sg = deco(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.45, 0.04), [mat(null, 1, 1, '#ffffff'), mat(null, 1, 1, '#ffffff'), mat(null, 1, 1, '#ffffff'), mat(null, 1, 1, '#ffffff'), mat(sign, 1, 1), mat(sign, 1, 1)]), x, 2.75, -1.5);
+    sg.rotation.y = Math.PI / 2;
+    deco(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.02), mat('pop100', 1, 1)), x, 1.95, 3.52);
+  });
+
+  // レジ
+  box(4, 9.5, 0, 1.0, 6, 7, { tex: 'counterFront', tile: [2, 1], faces: { '+y': { tex: 'stainless', tile: 1 } } });
+  for (const x of [5.2, 8.2]) box(x - 0.25, x + 0.25, 1.0, 1.35, 6.2, 6.55, { tex: 'register', stretch: true }, false);
+  // かごおき
+  for (let i = 0; i < 5; i++) deco(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.36), new THREE.MeshLambertMaterial({ color: '#e03131' })), 10.8, 0.13 + i * 0.12, 8.6);
+  k.colliders.push({ x0: 10.5, x1: 11.1, y0: 0, y1: 0.75, z0: 8.4, z1: 8.8 });
+
+  // ワゴン（ボール・トイレットペーパー・バケツ）
+  box(7, 8.6, 0, 0.8, -4, -2.8, { tex: 'stainless', tile: 1, color: '#ced4da' });
+  const ballCols = ['#ff6b6b', '#4dabf7', '#ffd43b', '#69db7c', '#da77f2'];
+  for (let i = 0; i < 18; i++) deco(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mat(null, 1, 1, ballCols[i % 5])), 7.15 + (i % 6) * 0.25, 0.9, -3.8 + Math.floor(i / 6) * 0.38);
+  for (let i = 0; i < 12; i++) cyl(9.6 + (i % 4) * 0.42, -0.8 + Math.floor(i / 4) * 0.42, 0.2, 0.36, 0, { color: '#f8f9fa' }, false, 14);
+  k.colliders.push({ x0: 9.4, x1: 11.2, y0: 0, y1: 0.36, z0: -1, z1: 0.3 });
+  ['#4dabf7', '#ffd43b', '#ff8787'].forEach((col, i) => cyl(9.8, 3 + i * 0.01, 0.3 - i * 0.02, 0.4, i * 0.3, { color: col, rTop: 0.33 - i * 0.02 }, false, 18));
+  k.colliders.push({ x0: 9.5, x1: 10.1, y0: 0, y1: 1.0, z0: 2.7, z1: 3.3 });
+
+  // お客さん
+  MAPS.shop.customers.forEach((c, i) => customer(k, c, 900 + i * 7));
+
+  k.lights('#ffffff', '#b8b2a6', 1.5, 0.9);
 }
 
 // ---------------------------------------------------------------------------
