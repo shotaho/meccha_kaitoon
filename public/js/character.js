@@ -31,7 +31,23 @@ export const POSES = {
 
 function partGeometry(p) {
   if (p.kind === 'sphere') return new THREE.SphereGeometry(p.r, 32, 20);
-  return new THREE.CapsuleGeometry(p.r, p.len, 10, 24);
+  const geo = new THREE.CapsuleGeometry(p.r, p.len, 10, 24);
+  // たての UV を体にそった長さに合わせる（まん中の筒の部分が細長くならないように）
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const half = p.len / 2;
+  const total = p.len + Math.PI * p.r;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    const rho = Math.hypot(pos.getX(i), pos.getZ(i));
+    let s;
+    if (y > half) s = (Math.PI * p.r) / 2 + p.len + p.r * Math.atan2(y - half, rho);
+    else if (y < -half) s = (Math.PI * p.r) / 2 - p.r * Math.atan2(-half - y, rho);
+    else s = (Math.PI * p.r) / 2 + (y + half);
+    uv.setY(i, s / total);
+  }
+  uv.needsUpdate = true;
+  return geo;
 }
 
 // テクスチャ1ピクセルあたりの大きさ（ブラシの太さをメートルで揃えるため）
@@ -39,6 +55,56 @@ function texelDensity(p) {
   const circ = 2 * Math.PI * p.r;
   const prof = p.kind === 'sphere' ? Math.PI * p.r : p.len + Math.PI * p.r;
   return Math.sqrt((p.tex / circ) * (p.tex / prof));
+}
+
+// 部位ごとの「のび方」表：v（たて）の位置ごとに、1メートルが何ピクセルになるか [よこ, たて]
+const stretchCache = new Map();
+function stretchTable(geo, key, S) {
+  const k = key + S;
+  if (stretchCache.has(k)) return stretchCache.get(k);
+  const N = 64;
+  const acc = Array.from({ length: N }, () => [0, 0, 0]);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const idx = geo.index;
+  const tri = idx ? idx.count / 3 : pos.count / 3;
+  const P = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const pu = new THREE.Vector3();
+  const pv = new THREE.Vector3();
+  for (let t = 0; t < tri; t++) {
+    const ids = [0, 1, 2].map((j) => (idx ? idx.getX(t * 3 + j) : t * 3 + j));
+    ids.forEach((id, j) => P[j].fromBufferAttribute(pos, id));
+    const [u0, v0, u1, v1, u2, v2] = ids.flatMap((id) => [uv.getX(id), uv.getY(id)]);
+    const a = u1 - u0;
+    const b = u2 - u0;
+    const c = v1 - v0;
+    const d = v2 - v0;
+    const det = a * d - b * c;
+    if (Math.abs(det) < 1e-9) continue;
+    e1.subVectors(P[1], P[0]);
+    e2.subVectors(P[2], P[0]);
+    // dP/du と dP/dv
+    pu.copy(e1).multiplyScalar(d).addScaledVector(e2, -c).divideScalar(det);
+    pv.copy(e2).multiplyScalar(a).addScaledVector(e1, -b).divideScalar(det);
+    const lu = pu.length();
+    const lv = pv.length();
+    if (lu < 1e-6 || lv < 1e-6) continue;
+    const bin = Math.min(N - 1, Math.max(0, Math.floor(((v0 + v1 + v2) / 3) * N)));
+    acc[bin][0] += S / lu;
+    acc[bin][1] += S / lv;
+    acc[bin][2] += 1;
+  }
+  const out = acc.map(([x, y, n]) => (n ? [x / n, y / n] : null));
+  for (let i = 0; i < N; i++) {
+    if (out[i]) continue;
+    let j = 1;
+    while (!out[i - j] && !out[i + j] && j < N) j++;
+    out[i] = (out[i - j] || out[i + j] || [S, S]).slice();
+  }
+  stretchCache.set(k, out);
+  return out;
 }
 
 function makeLabel(text, color) {
@@ -300,22 +366,38 @@ export class Character {
       g.fillStyle = op.c;
       g.fillRect(0, 0, S, S);
     } else if (op.k === 's') {
-      g.strokeStyle = g.fillStyle = op.c;
-      g.lineWidth = op.r * 2;
-      g.lineCap = g.lineJoin = 'round';
-      // 横方向はつなぎ目をまたいで描く
-      for (const ox of [-S, 0, S]) {
-        const pts = op.pts;
-        if (pts.length === 2) {
+      // 体の上でまるく見えるように、場所ごとの「のび方」に合わせただ円でぬる
+      g.fillStyle = op.c;
+      const tbl = stretchTable(this.parts[op.p].geometry, PARTS[op.p].name, S);
+      const base = op.r / pt.density; // 半径（メートル）
+      const stamp = (u, v) => {
+        const [ku, kv] = tbl[Math.min(tbl.length - 1, Math.max(0, Math.floor(v * tbl.length)))];
+        const rx = Math.min(S, Math.max(0.5, base * ku));
+        const ry = Math.max(0.5, base * kv);
+        const x = u * S;
+        const y = (1 - v) * S;
+        for (const ox of [-S, 0, S]) {
           g.beginPath();
-          g.arc(pts[0] * S + ox, (1 - pts[1]) * S, op.r, 0, Math.PI * 2);
+          g.ellipse(x + ox, y, rx, ry, 0, 0, Math.PI * 2);
           g.fill();
-        } else {
-          g.beginPath();
-          g.moveTo(pts[0] * S + ox, (1 - pts[1]) * S);
-          for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i] * S + ox, (1 - pts[i + 1]) * S);
-          g.stroke();
         }
+        return Math.min(rx, ry);
+      };
+      const pts = op.pts;
+      let pu = pts[0];
+      let pv = pts[1];
+      let rr = stamp(pu, pv);
+      for (let i = 2; i < pts.length; i += 2) {
+        let u = pts[i];
+        const v = pts[i + 1];
+        // 横のつなぎ目をまたぐときは近いほうへ
+        if (u - pu > 0.5) u -= 1;
+        else if (pu - u > 0.5) u += 1;
+        const len = Math.hypot((u - pu) * S, (v - pv) * S);
+        const n = Math.min(400, Math.max(1, Math.ceil(len / Math.max(0.6, rr * 0.4))));
+        for (let j = 1; j <= n; j++) rr = stamp(pu + ((u - pu) * j) / n, pv + ((v - pv) * j) / n);
+        pu = ((u % 1) + 1) % 1;
+        pv = v;
       }
     }
     this.dirty.add(op.p);
