@@ -1868,6 +1868,48 @@ const GEN = {
     return c;
   },
 
+  pirateFlag() {
+    const [c, g] = canvas(128, 96);
+    g.fillStyle = '#151515';
+    g.fillRect(0, 0, 128, 96);
+    g.fillStyle = '#f1f1f1';
+    g.beginPath();
+    g.arc(64, 40, 18, 0, Math.PI * 2);
+    g.fill();
+    g.fillRect(54, 50, 20, 12);
+    g.fillStyle = '#151515';
+    g.beginPath();
+    g.arc(57, 38, 5, 0, Math.PI * 2);
+    g.arc(71, 38, 5, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#f1f1f1';
+    g.lineWidth = 7;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(34, 64);
+    g.lineTo(94, 86);
+    g.moveTo(94, 64);
+    g.lineTo(34, 86);
+    g.stroke();
+    // やぶれ
+    g.clearRect(110, 70, 18, 26);
+    g.clearRect(118, 50, 10, 20);
+    return c;
+  },
+  jungleFloor() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(708);
+    g.fillStyle = '#5d7a3a';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 400; i++) {
+      g.fillStyle = r() < 0.6 ? hsl(90 + r() * 30, 40, 22 + r() * 20) : hsl(30, 40, 25 + r() * 15);
+      g.beginPath();
+      g.ellipse(r() * 128, r() * 128, 2 + r() * 4, 1 + r() * 2, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    return c;
+  },
+
   // ----- うちゅう -----
   moonGround() {
     const [c, g] = canvas(256, 256);
