@@ -7,12 +7,16 @@ import * as THREE from 'three';
 import { MAPS } from './maps.js';
 import { collide, groundAt, ceilingAt } from './world.js';
 import { renderPixels } from './camo.js';
+import { partColors, lookDiff } from './character.js';
 
+// fool：お客さんにうまくなりすましているとき、どれだけだまされるか
 const LEVEL = {
-  easy: { t0: 0.42, mult: 0.35, speed: 2.6, react: 1.4, miss: 0.05, check: 0.8 },
-  normal: { t0: 0.26, mult: 0.6, speed: 3.4, react: 0.9, miss: 0.025, check: 0.6 },
-  hard: { t0: 0.13, mult: 0.9, speed: 4.2, react: 0.5, miss: 0.01, check: 0.45 },
+  easy: { t0: 0.42, mult: 0.35, speed: 2.6, react: 1.4, miss: 0.05, check: 0.8, fool: 0.995 },
+  normal: { t0: 0.26, mult: 0.6, speed: 3.4, react: 0.9, miss: 0.025, check: 0.6, fool: 0.985 },
+  hard: { t0: 0.13, mult: 0.9, speed: 4.2, react: 0.5, miss: 0.01, check: 0.45, fool: 0.97 },
 };
+
+const PERSON_POSES = new Set(['stand', 'crouch']);
 
 const PROBE = 96;
 const R = 0.3;
@@ -263,7 +267,10 @@ export function createCpuBrains(ctx) {
         if (best) {
           const { area, ratio } = probe(world, eye, best.id, best.c);
           const sizeF = Math.min(1, area / 150);
-          const prob = area < 6 ? 0 : THREE.MathUtils.clamp((ratio - L.t0) / (1 - L.t0), 0, 1) * Math.sqrt(sizeF) * L.mult;
+          let prob = area < 6 ? 0 : THREE.MathUtils.clamp((ratio - L.t0) / (1 - L.t0), 0, 1) * Math.sqrt(sizeF) * L.mult;
+          // お客さんになりすましていたら「ただのお客さん」と思って見のがしやすい
+          const dis = disguise(world, ctx.chars.get(best.id));
+          if (dis > 0) prob *= 1 - L.fool * dis * (best.d < 2.5 ? 0.85 : 1);
           if (Math.random() < prob) {
             b.mode = 'chase';
             b.path = [];
@@ -299,6 +306,20 @@ export function createCpuBrains(ctx) {
   }
 
   return { update };
+}
+
+// お客さんへのなりすまし度（0〜1）。服の色が近く、ふつうのポーズで、床に立っているほど高い
+export function disguise(world, ch) {
+  if (!world.customers || !world.customers.length || !ch || !ch.paint.length) return 0;
+  if (!PERSON_POSES.has(ch.pose)) return 0;
+  const r = ch.root.rotation;
+  if (Math.abs(r.x) > 0.25 || Math.abs(r.z) > 0.25) return 0;
+  if (ch.root.position.y > 0.15) return 0;
+  const mine = partColors(ch);
+  let best = 1;
+  for (const c of world.customers) best = Math.min(best, lookDiff(mine, c.colors) + (c.pose === ch.pose ? 0 : 0.05));
+  // 0.06 以下ならそっくり、0.22 以上はにていない
+  return THREE.MathUtils.clamp((0.22 - best) / 0.16, 0, 1);
 }
 
 function lerpAngle(a, b, k) {

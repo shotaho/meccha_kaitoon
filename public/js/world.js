@@ -5,7 +5,7 @@ import { tex, rng } from './textures.js';
 import { MAPS, genBlocks, BLOCKS } from './maps.js';
 import { blockMaterials } from './blocktex.js';
 import { buildSky } from './sky.js';
-import { Character, POSES } from './character.js';
+import { Character, POSES, partColors } from './character.js';
 
 const FACE_DIRS = ['+x', '-x', '+y', '-y', '+z', '-z'];
 
@@ -131,7 +131,8 @@ export function buildWorld(scene, mapId) {
     return mesh;
   }
 
-  const kit = { group, box, plate, plant, add, cyl, sphere, deco, mat, lights, colliders, meshes, bounds };
+  const customers = [];
+  const kit = { group, box, plate, plant, add, cyl, sphere, deco, mat, lights, colliders, meshes, bounds, customers };
   const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy, city: buildCity, space: buildSpace, island: buildIsland, sado: buildSado, shop: buildShop };
   (builders[mapId] || buildHouse)(kit);
 
@@ -145,6 +146,7 @@ export function buildWorld(scene, mapId) {
     meshes,
     colliders,
     bounds,
+    customers,
     update() {
       if (sky) sky.update();
     },
@@ -1327,6 +1329,7 @@ function customer(k, c, seed) {
   }
   if (ch.label) ch.label.visible = false;
   k.group.add(ch.root);
+  k.customers.push({ pose: ch.pose, colors: partColors(ch) });
   const hgt = ch.pose === 'crouch' ? 1.3 : 1.75;
   k.colliders.push({ x0: c.p[0] - 0.3, x1: c.p[0] + 0.3, y0: c.p[1], y1: c.p[1] + hgt, z0: c.p[2] - 0.3, z1: c.p[2] + 0.3 });
 }

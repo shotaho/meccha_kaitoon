@@ -146,6 +146,7 @@ export class Character {
     this.paint = [];
     this.dirty = new Set();
     this.outlines = [];
+    this.paintVersion = 0;
 
     this.hip = new THREE.Group();
     this.hip.position.y = HIP_Y;
@@ -353,6 +354,7 @@ export class Character {
       pt.ctx.fillRect(0, 0, pt.size, pt.size);
       this.dirty.add(i);
     }
+    this.paintVersion++;
   }
 
   applyOp(op) {
@@ -401,6 +403,7 @@ export class Character {
       }
     }
     this.dirty.add(op.p);
+    this.paintVersion++;
   }
 
   replay(ops) {
@@ -414,6 +417,42 @@ export class Character {
     for (const p of this.paint) p.tex.dispose();
     if (this.label) this.label.material.map.dispose();
   }
+}
+
+// 見た目のおおまかな色（あたま・どう・うで・あし）。なりすましの判定に使う
+const avgCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+export function partColors(ch) {
+  if (ch._colors && ch._colorsVer === ch.paintVersion) return ch._colors;
+  avgCanvas.width = avgCanvas.height = 4;
+  const g = avgCanvas.getContext('2d', { willReadFrequently: true });
+  const avg = (i) => {
+    g.clearRect(0, 0, 4, 4);
+    g.drawImage(ch.paint[i].canvas, 0, 0, 4, 4);
+    const d = g.getImageData(0, 0, 4, 4).data;
+    const c = [0, 0, 0];
+    for (let k = 0; k < d.length; k += 4) for (let j = 0; j < 3; j++) c[j] += d[k + j] / 16;
+    return c;
+  };
+  const a = ch.paint.map((_, i) => avg(i));
+  const mix = (x, y) => x.map((v, j) => (v + y[j]) / 2);
+  // あたま・どう・うで・あし
+  ch._colors = [a[1], a[0], mix(a[2], a[3]), mix(a[4], a[5])];
+  ch._colorsVer = ch.paintVersion;
+  return ch._colors;
+}
+
+// 2人の見た目のちがい（0：同じ〜1：ぜんぜんちがう）
+export function lookDiff(ca, cb) {
+  // どこか1か所でも大きくちがえばばれる（平均と最大のまんなか）
+  const w = [0.2, 0.35, 0.2, 0.25];
+  let sum = 0;
+  let max = 0;
+  for (let i = 0; i < 4; i++) {
+    const d = Math.hypot(ca[i][0] - cb[i][0], ca[i][1] - cb[i][1], ca[i][2] - cb[i][2]) / 441;
+    sum += w[i] * d;
+    max = Math.max(max, d);
+  }
+  return (sum + max) / 2;
 }
 
 function lerpAngle(a, b, k) {
