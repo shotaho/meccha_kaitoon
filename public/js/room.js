@@ -84,6 +84,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
   let roundNo = 0;
   let foundLog = [];
   let roundResult = null;
+  let doors = {}; // ろうやのとびら { id: true(ひらいている) }
   const timers = [];
 
   const settings = {
@@ -185,6 +186,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
       players: [...players.values()].sort((a, b) => a.joinedAt - b.joinedAt).map(publicPlayer),
       foundLog,
       result: roundResult,
+      doors,
       urls: getUrls(),
     };
   }
@@ -233,6 +235,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
     }
 
     roundNo++;
+    doors = {};
     foundLog = [];
     roundResult = null;
     let hi = 0;
@@ -479,11 +482,22 @@ export function createRoom({ getUrls = () => [] } = {}) {
         broadcastState();
         return;
       }
+      case 'door': {
+        // とびらの開け閉め：準備中はかくれる側、さがす時間はおに。近くにいるときだけ
+        const d = (MAPS[settings.map].doors || []).find((x) => x.id === msg.id);
+        if (!d || !p.tf) return;
+        const ok = (phase === 'prep' && p.role === 'hider') || (phase === 'hunt' && p.role === 'seeker');
+        if (!ok) return;
+        if (Math.hypot(p.tf.p[0] - d.c[0], p.tf.p[2] - d.c[1]) > 3) return;
+        doors[d.id] = !doors[d.id];
+        broadcast({ t: 'doors', doors });
+        return;
+      }
       case 'cpu': {
         // CPU 鬼の動きはホストのブラウザが計算して送ってくる
         if (!isHost || !msg.msg || typeof msg.msg !== 'object') return;
         const c = players.get(msg.id);
-        if (!c || !c.cpu || (msg.msg.t !== 'tf' && msg.msg.t !== 'shoot')) return;
+        if (!c || !c.cpu || !['tf', 'shoot', 'door'].includes(msg.msg.t)) return;
         handle(c, msg.msg);
         return;
       }

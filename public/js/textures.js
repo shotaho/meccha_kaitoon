@@ -1910,6 +1910,47 @@ const GEN = {
     return c;
   },
 
+  // ----- けいむしょ -----
+  prisonWall() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(901);
+    g.fillStyle = '#b7bdb3';
+    g.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 128; y += 16) {
+      g.fillStyle = 'rgba(0,0,0,.12)';
+      g.fillRect(0, y, 128, 1);
+      for (let x = (y / 16) % 2 ? 0 : 16; x < 128; x += 32) g.fillRect(x, y, 1, 16);
+    }
+    for (let i = 0; i < 300; i++) {
+      g.fillStyle = `rgba(0,0,0,${r() * 0.08})`;
+      g.fillRect(r() * 128, r() * 128, 2, 2);
+    }
+    g.fillStyle = '#6b7a5a';
+    g.fillRect(0, 96, 128, 32);
+    return c;
+  },
+  prisonFloor() {
+    const [c, g] = canvas(128, 128);
+    const r = rng(902);
+    g.fillStyle = '#8d9196';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 500; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,255,255'},${r() * 0.08})`;
+      g.fillRect(r() * 128, r() * 128, 3, 3);
+    }
+    g.strokeStyle = 'rgba(0,0,0,.25)';
+    g.strokeRect(0.5, 0.5, 127, 127);
+    return c;
+  },
+  mattress() {
+    const [c, g] = canvas(64, 64);
+    g.fillStyle = '#e9edf2';
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#5b7bb5';
+    for (let x = 0; x < 64; x += 12) g.fillRect(x, 0, 5, 64);
+    return c;
+  },
+
   // ----- うちゅう -----
   moonGround() {
     const [c, g] = canvas(256, 256);

@@ -132,8 +132,9 @@ export function buildWorld(scene, mapId) {
   }
 
   const customers = [];
-  const kit = { group, box, plate, plant, add, cyl, sphere, deco, mat, lights, colliders, meshes, bounds, customers };
-  const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy, city: buildCity, space: buildSpace, island: buildIsland, sado: buildSado, shop: buildShop };
+  const doors = [];
+  const kit = { group, box, plate, plant, add, cyl, sphere, deco, mat, lights, colliders, meshes, bounds, customers, doors };
+  const builders = { burger: buildBurger, blocks: buildBlocks, sea: buildSea, car: buildCar, candy: buildCandy, city: buildCity, space: buildSpace, island: buildIsland, sado: buildSado, shop: buildShop, prison: buildPrison };
   (builders[mapId] || buildHouse)(kit);
 
   scene.background = new THREE.Color(def.sky || (def.outdoor ? '#9fd3f5' : '#222222'));
@@ -147,8 +148,18 @@ export function buildWorld(scene, mapId) {
     colliders,
     bounds,
     customers,
+    doors,
+    // とびらの開け閉め（{ id: true(ひらく) }）
+    setDoors(state = {}) {
+      for (const d of doors) {
+        const open = !!state[d.id];
+        d.target = open ? d.openAngle : 0;
+        Object.assign(d.collider, open ? { y0: -101, y1: -100 } : d.closedBox);
+      }
+    },
     update() {
       if (sky) sky.update();
+      for (const d of doors) d.pivot.rotation.y += (d.target - d.pivot.rotation.y) * 0.18;
     },
     dispose() {
       group.removeFromParent();
@@ -1396,6 +1407,178 @@ function buildShop(k) {
   MAPS.shop.customers.forEach((c, i) => customer(k, c, 900 + i * 7));
 
   k.lights('#ffffff', '#b8b2a6', 1.5, 0.9);
+}
+
+// ---------------------------------------------------------------------------
+// けいむしょ
+// ---------------------------------------------------------------------------
+
+function buildPrison(k) {
+  const { box, plate, cyl, deco, add, mat } = k;
+  const def = MAPS.prison;
+  const { x0: X0, x1: X1, z0: Z0, z1: Z1, h: H } = k.bounds;
+  const T = 0.5;
+  const wall = { tex: 'prisonWall', tile: [2, H] };
+  const steel = new THREE.MeshLambertMaterial({ color: '#5f666d' });
+
+  // 床・天井・外かべ
+  box(X0 - T, X1 + T, -T, 0, Z0 - T, Z1 + T, { tex: 'prisonFloor', tile: 2 }, false);
+  box(X0 - T, X1 + T, H, H + T, Z0 - T, Z1 + T, { tex: 'concrete', tile: 2, color: '#9aa0a6' }, false);
+  box(X0 - T, X1 + T, 0, H, Z0 - T, Z0, wall);
+  box(X0 - T, X1 + T, 0, H, Z1, Z1 + T, wall);
+  box(X0 - T, X0, 0, H, Z0, Z1, wall);
+  box(X1, X1 + T, 0, H, Z0, Z1, wall);
+  // けいこうとう（飾り）
+  const lamp = new THREE.MeshBasicMaterial({ color: '#f1f5ff' });
+  for (let x = -12; x <= 12; x += 6) for (const z of [-5, 0, 5]) deco(new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 0.25), lamp), x, H - 0.03, z);
+
+  // てつごうし（たくさんのぼう）。ぼうのあいだは向こうが見えるし、撃てる
+  const barGeo = new THREE.CylinderGeometry(0.025, 0.025, 1, 6);
+  function bars(xa, xb, z, y0, y1, step = 0.2) {
+    const n = Math.max(1, Math.round((xb - xa) / step));
+    const im = new THREE.InstancedMesh(barGeo, steel, n);
+    const m4 = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) {
+      m4.makeScale(1, y1 - y0, 1).setPosition(xa + (i + 0.5) * ((xb - xa) / n), (y0 + y1) / 2, z);
+      im.setMatrixAt(i, m4);
+    }
+    k.group.add(im);
+    k.meshes.push(im);
+    deco(new THREE.Mesh(new THREE.BoxGeometry(xb - xa, 0.06, 0.06), steel), (xa + xb) / 2, y1 - 0.03, z);
+    deco(new THREE.Mesh(new THREE.BoxGeometry(xb - xa, 0.06, 0.06), steel), (xa + xb) / 2, 1.1, z);
+  }
+
+  // ろうや
+  const num = (text) => {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 32;
+    const g = c.getContext('2d');
+    g.fillStyle = '#f2c94c';
+    g.fillRect(0, 0, 64, 32);
+    g.fillStyle = '#222';
+    g.font = 'bold 22px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(text, 32, 17);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshLambertMaterial({ map: t });
+  };
+  function cell(x0, side, label) {
+    // side：-1 は北（おくが -z）、+1 は南（おくが +z）
+    const zf = side < 0 ? -8 : 8; // ろうやの前（こうしの線）
+    const zb = side < 0 ? Z0 : Z1; // おく
+    const zIn = (d) => zf + side * d; // 前から d m おく
+    const zr = [Math.min(zf, zb), Math.max(zf, zb)];
+    // しきりのかべ
+    box(x0 + 3.85, x0 + 4.15, 0, H, zr[0], zr[1], wall);
+    // こうし（とびら以外）とうえのコンクリート
+    bars(x0 + 0.15, x0 + 2.8, zf, 0, 3.0);
+    bars(x0 + 2.8, x0 + 3.85, zf, 2.2, 3.0);
+    k.colliders.push({ x0: x0 + 0.15, x1: x0 + 2.8, y0: 0, y1: H, z0: zf - 0.05, z1: zf + 0.05 });
+    k.colliders.push({ x0: x0 + 2.8, x1: x0 + 3.85, y0: 2.2, y1: H, z0: zf - 0.05, z1: zf + 0.05 });
+    box(x0, x0 + 4, 3.0, H, zf - 0.15, zf + 0.15, { tex: 'concrete', tile: 1, color: '#9aa0a6' });
+    const sign = deco(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.25), num(label)), x0 + 1.5, 3.4, zf - side * 0.16);
+    if (side > 0) sign.rotation.y = Math.PI;
+    // 2だんベッド
+    const bx0 = x0 + 0.15;
+    const bx1 = x0 + 1.05;
+    const bz0 = Math.min(zIn(1.6), zIn(3.85));
+    const bz1 = Math.max(zIn(1.6), zIn(3.85));
+    for (const [y0, y1] of [[0.35, 0.55], [1.55, 1.75]]) {
+      box(bx0, bx1, y0 - 0.06, y1, bz0, bz1, { tex: 'mattress', tile: 0.6, faces: { '-y': { color: '#5f666d' } } });
+    }
+    for (const xx of [bx0 + 0.04, bx1 - 0.04]) for (const zz of [bz0 + 0.04, bz1 - 0.04]) {
+      deco(new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.06), steel), xx, 0.95, zz);
+    }
+    k.colliders.push({ x0: bx0, x1: bx1, y0: 0, y1: 0.29, z0: bz0, z1: bz1 });
+    // トイレ・せんめんだい・たな
+    const tz = zIn(3.6);
+    cyl(x0 + 3.4, tz, 0.25, 0.45, 0, { color: '#e9ecef' }, true, 16);
+    box(x0 + 3.15, x0 + 3.65, 0.45, 0.85, Math.min(tz, zIn(3.95)) , Math.max(tz, zIn(3.95)), { color: '#dee2e6' });
+    box(x0 + 2.2, x0 + 2.9, 0.8, 0.95, Math.min(zIn(3.6), zIn(3.95)), Math.max(zIn(3.6), zIn(3.95)), { tex: 'stainless', tile: 0.5 });
+    box(x0 + 2.2, x0 + 3.0, 1.7, 1.75, Math.min(zIn(3.7), zIn(3.95)), Math.max(zIn(3.7), zIn(3.95)), { tex: 'wood', tile: 0.5 });
+    deco(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.15), mat(null, 1, 1, '#c0443f')), x0 + 2.4, 1.88, zIn(3.85));
+    deco(new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.15), mat(null, 1, 1, '#4a7bd0')), x0 + 2.75, 1.85, zIn(3.85));
+  }
+  def.cells.north.forEach((x0, i) => cell(x0, -1, 'A-' + (i + 1)));
+  def.cells.south.forEach((x0, i) => cell(x0, 1, 'B-' + (i + 1)));
+
+  // ひらくとびら
+  for (const d of def.doors) {
+    const pivot = new THREE.Group();
+    pivot.position.set(d.hinge[0], 0, d.hinge[1]);
+    k.group.add(pivot);
+    const w = d.x1 - d.x0;
+    const im = new THREE.InstancedMesh(barGeo, steel, 5);
+    const m4 = new THREE.Matrix4();
+    for (let i = 0; i < 5; i++) {
+      m4.makeScale(1, 2.1, 1).setPosition(-0.1 - i * 0.2, 1.08, 0);
+      im.setMatrixAt(i, m4);
+    }
+    pivot.add(im);
+    k.meshes.push(im);
+    for (const y of [0.06, 1.1, 2.14]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.07, 0.07), steel);
+      rail.position.set(-w / 2, y, 0);
+      pivot.add(rail);
+      k.meshes.push(rail);
+    }
+    const lock = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 0.12), mat(null, 1, 1, '#3a3f45'));
+    lock.position.set(-w + 0.1, 1.1, 0);
+    pivot.add(lock);
+    const closedBox = { x0: d.x0, x1: d.x1, y0: 0, y1: 2.2, z0: d.z - 0.06, z1: d.z + 0.06 };
+    const collider = { ...closedBox };
+    k.colliders.push(collider);
+    k.doors.push({ id: d.id, pivot, collider, closedBox, openAngle: d.open, target: 0 });
+  }
+
+  // しょくどう（まんなか）
+  for (const x of [-12, -8, -4]) {
+    box(x - 1.2, x + 1.2, 0.72, 0.8, -0.5, 0.5, { tex: 'stainless', tile: 1 });
+    k.colliders.push({ x0: x - 0.1, x1: x + 0.1, y0: 0, y1: 0.72, z0: -0.3, z1: 0.3 });
+    deco(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.72, 0.6), steel), x, 0.36, 0);
+    for (const z of [-1, 1]) box(x - 1.2, x + 1.2, 0.4, 0.46, z - 0.18, z + 0.18, { tex: 'stainless', tile: 1 });
+    for (const z of [-1, 1]) k.colliders.push({ x0: x - 0.05, x1: x + 0.05, y0: 0, y1: 0.4, z0: z - 0.1, z1: z + 0.1 });
+    // トレー
+    for (const dx of [-0.6, 0.5]) deco(new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.03, 0.32), mat(null, 1, 1, '#c97b3a')), x + dx, 0.82, 0.15);
+  }
+  // かんしゅのつくえ
+  box(3, 6, 0, 1.0, 2, 3, { tex: 'wood', tile: 0.8, color: '#7a6a5a' });
+  for (const x of [3.6, 5.2]) box(x, x + 0.7, 1.0, 1.5, 2.3, 2.4, { tex: 'glassDark', tile: 1 });
+  box(3.2, 3.8, 0, 0.5, 3.4, 4, { color: '#2b2b2b' });
+  // せんたくもののカート
+  box(1.5, 2.7, 0.15, 1.0, -5.5, -4.7, { color: '#5f8fbf', faces: { '+y': { tex: 'mattress', tile: 0.5 } } });
+  k.colliders.push({ x0: 1.5, x1: 2.7, y0: 0, y1: 0.15, z0: -5.5, z1: -4.7 });
+
+  // シャワー室（北東）
+  box(7.85, 8.15, 0, H, -8, -7, wall);
+  box(9.8, X1, 0, H, -4.3, -4, wall);
+  const tile = { tex: 'tiles', tile: 0.8 };
+  box(8.15, X1, 0, H, Z0, Z0 + 0.05, tile);
+  for (const x of [10, 12, 14]) box(x - 0.05, x + 0.05, 0, 2.0, Z0, -10, { tex: 'tiles', tile: 0.8 });
+  for (const x of [9, 11, 13, 15]) {
+    deco(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.05, 0.12, 12), steel), x, 2.2, Z0 + 0.3);
+  }
+
+  // ジム（南東）
+  box(5, 6.6, 0, 0.5, 9.5, 10.1, { color: '#2b2b2b' });
+  k.colliders.push({ x0: 5.2, x1: 6.4, y0: 0, y1: 0.5, z0: 9.5, z1: 10.1 });
+  const bar = add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.8, 8), steel), 5.8, 1.1, 9.4);
+  bar.rotation.z = Math.PI / 2;
+  for (const x of [5.0, 6.6]) add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.08, 16), mat(null, 1, 1, '#222')), x, 1.1, 9.4).rotation.z = Math.PI / 2;
+  cyl(9, 7, 0.3, 1.2, 1.2, { color: '#8a2b2b' }, true, 14); // サンドバッグ
+  deco(new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.6, 4), steel), 9, 3.2, 7);
+  box(15.6, 16, 2.2, 3.2, 9, 10.6, { color: '#f1f3f5' }); // バスケットのボード
+  deco(new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.02, 6, 20), mat(null, 1, 1, '#e8590c')), 15.3, 2.5, 9.8).rotation.x = Math.PI / 2;
+  // ロッカー
+  box(15.5, X1, 0, 2.2, -2, 3, { tex: 'lockers', tile: 1, color: '#bbbbbb', faces: { '-x': { tex: 'lockers', stretch: true, color: '#9fb1c4' } } });
+
+  // ろうかのかべの絵・きまり
+  plate(-15.97, 2.2, 0, 1.6, 1.0, '+x', 'posterDrink');
+
+  k.lights('#e8eef5', '#5a6068', 1.3, 0.8);
 }
 
 // ---------------------------------------------------------------------------

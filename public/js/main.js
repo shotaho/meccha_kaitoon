@@ -288,6 +288,7 @@ function onMessage(m) {
       S = m;
       stateAt = performance.now();
       ensureWorld(S.settings.map);
+      world.setDoors(S.doors);
       if (offline) {
         // CPU 戦の設定は次回のために覚えておく
         store.set('cpu.cpus', String(S.settings.cpus || 3));
@@ -352,6 +353,10 @@ function onMessage(m) {
       opsById.set(m.id, m.ops);
       chars.get(m.id)?.replay(m.ops);
       if (m.id === myId) rebuildGroups();
+      break;
+    case 'doors':
+      if (S) S.doors = m.doors;
+      world.setDoors(m.doors);
       break;
     case 'shot':
       if (m.point) splat(m.point, !!m.hit);
@@ -542,7 +547,28 @@ addEventListener('blur', () => keys.clear());
 // 隠れる側はじゅんび中も、さがされている間（見つかるまで）もぬれる
 const canPaint = () => viewMode === 'hider' || viewMode === 'frozen';
 
+// ちかくのとびらを開け閉めする
+function nearDoor() {
+  const ds = MAPS[world.id]?.doors;
+  if (!ds || (viewMode !== 'hider' && viewMode !== 'fps')) return null;
+  let best = null;
+  for (const d of ds) {
+    const dist = Math.hypot(self.pos.x - d.c[0], self.pos.z - d.c[1]);
+    if (dist < 2.2 && (!best || dist < best.dist)) best = { id: d.id, dist };
+  }
+  return best;
+}
+function toggleDoor() {
+  const d = nearDoor();
+  if (d) send({ t: 'door', id: d.id });
+  else if (MAPS[world.id]?.doors) toast('とびらのちかくでおしてね');
+}
+
 function onKey(e) {
+  if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
+    toggleDoor();
+    return;
+  }
   if (canPaint()) {
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
       e.preventDefault();
@@ -1402,6 +1428,7 @@ function renderHint() {
   } else if (viewMode === 'free') {
     html = 'かんせんちゅう　WASD：いどう　Q/E：うえ・した　ドラッグ：してん';
   }
+  if (html && MAPS[world.id]?.doors && (viewMode === 'hider' || viewMode === 'fps')) html += '<br><b>F：ちかくのとびらを開ける・しめる</b>';
   el.innerHTML = html;
   el.classList.toggle('hidden', !html);
 }
@@ -1425,6 +1452,14 @@ function renderTouch() {
   };
   if (viewMode === 'fps' && !MAPS[world.id]?.zeroG) btns.append(hold('jump', '⤒'));
   else btns.append(hold('up', '⬆'), hold('down', '⬇'));
+  if (MAPS[world.id]?.doors && (viewMode === 'hider' || viewMode === 'fps')) {
+    const b = h('button', {}, '🚪');
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      toggleDoor();
+    });
+    btns.append(b);
+  }
 }
 
 const PALETTE = ['#ffffff', '#d9d9d9', '#8c8c8c', '#3a3a3a', '#000000', '#8a5a34', '#c0443f', '#e07a8b', '#f2c94c', '#6f9d4a', '#4a7bd0', '#7b5ea7'];

@@ -133,7 +133,7 @@ export function createCpuBrains(ctx) {
           goal = b.target;
         } else {
           goal = tc.root.position.clone();
-          goalDist = 4.5;
+          goalDist = b.chaseClose ? 0.8 : 4.5;
         }
       }
       // 高さがちがう場所へはかいだんを通って行く
@@ -207,6 +207,16 @@ export function createCpuBrains(ctx) {
           if (zeroG) b.pos.y = Math.min(b.pos.y + L.speed * dt, world.bounds.h - H);
           else if (b.onGround) b.vy = 6;
           b.stuck += dt;
+          // しまったとびらの前ならあける
+          const ds = MAPS[mapId].doors;
+          if (ds && b.stuck > 0.3 && !(b.doorT > b.time)) {
+            const d = ds.find((x) => !(S.doors || {})[x.id] && Math.hypot(b.pos.x - x.c[0], b.pos.z - x.c[1]) < 1.8);
+            if (d) {
+              ctx.send({ t: 'cpu', id: p.id, msg: { t: 'door', id: d.id } });
+              b.doorT = b.time + 2;
+              b.stuck = 0;
+            }
+          }
           if (b.stuck > 1.5) {
             b.mode = 'wander';
             pickTarget(b, world, mapId);
@@ -242,7 +252,17 @@ export function createCpuBrains(ctx) {
             b.mode = 'wander';
             b.chaseId = null;
             pickTarget(b, world, mapId);
+          } else {
+            // てつごうしなどでねらえない → もっと近づく（とびらがあればあける）
+            b.chaseClose = true;
           }
+        }
+        // ずっとねらえなければあきらめる
+        b.chaseT = (b.chaseT || 0) + dt;
+        if (b.mode === 'chase' && b.chaseT > 15) {
+          b.mode = 'wander';
+          b.chaseId = null;
+          pickTarget(b, world, mapId);
         }
       }
 
@@ -274,6 +294,8 @@ export function createCpuBrains(ctx) {
           if (Math.random() < prob) {
             b.mode = 'chase';
             b.path = [];
+            b.chaseClose = false;
+            b.chaseT = 0;
             b.chaseId = best.id;
             b.reactT = L.react * (0.7 + Math.random() * 0.6);
           } else if (prob > 0.08 && best.d > 4) {
