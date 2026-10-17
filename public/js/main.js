@@ -357,6 +357,9 @@ function onMessage(m) {
     case 'paintSum':
       checkPaintSums(m.sums || {});
       break;
+    case 'pong':
+      showPing(performance.now() - m.c);
+      break;
     case 'paintReset':
       opsById.set(m.id, m.ops);
       chars.get(m.id)?.replay(m.ops);
@@ -979,6 +982,29 @@ function redo() {
   commitGroup(g.ops.map((op) => ({ ...op })));
 }
 
+// ----- つうしんのおくれ（ゲストだけ表示） -----
+let pingWarned = false;
+let lastPing = 0;
+setInterval(() => {
+  const el = $('ping');
+  if (!link || offline || hosting || netMode === 'server' || !joined) {
+    el.classList.add('hidden');
+    return;
+  }
+  send({ t: 'ping', c: performance.now() });
+}, 2000);
+function showPing(ms) {
+  lastPing = ms;
+  const el = $('ping');
+  const relay = globalThis.__mcNetMode === 'relay';
+  el.textContent = `📶 ${Math.round(ms)}ms${relay ? '（ちゅうけい）' : ''}`;
+  el.className = ms < 300 ? 'ok' : ms < 1000 ? 'mid' : 'bad';
+  if (ms > 2500 && !pingWarned) {
+    pingWarned = true;
+    toast('つうしんがとてもおくれています。Wi‑Fi のつよいところであそんでね');
+  }
+}
+
 // ----- ペイントのずれをなおす -----
 const syncAskedAt = new Map();
 function requestPaintSync(id) {
@@ -1128,7 +1154,9 @@ function step() {
 
   // 送信
   tfTimer += dt;
-  if (tfTimer > 0.066) {
+  // つうしんがとてもおくれているときは、位置を送る回数をへらす（行列がたまらないように）
+  const tfGap = lastPing < 2500 ? 0.066 : 0.2;
+  if (tfTimer > tfGap) {
     tfTimer = 0;
     flushStroke(false);
     flushPaint();

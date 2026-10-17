@@ -223,3 +223,14 @@ details summary { cursor: pointer; font-weight: 800; }
   #hud { top: 6px; padding: 4px 10px; gap: 6px; }
   #timer { font-size: 18px; }
 }
+
+/* つうしんのおくれ（ゲストだけ） */
+#ping {
+  position: fixed; right: 8px; bottom: 8px; z-index: 9; pointer-events: none;
+  background: rgba(0, 0, 0, .55); padding: 3px 8px; border-radius: 99px;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+#ping.ok { color: #8ce99a; }
+#ping.mid { color: #ffd43b; }
+#ping.bad { color: #ff8787; }
+@media (max-width: 700px) { #ping { top: 6px; bottom: auto; right: 6px; } }

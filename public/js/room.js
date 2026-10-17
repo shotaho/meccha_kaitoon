@@ -391,6 +391,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
         broadcast({ t: 'paint', id: p.id, ops, n: p.ops.length }, p.id);
         return;
       }
+      case 'ping':
+        // つうしんのおくれをはかる
+        send(p, { t: 'pong', c: msg.c });
+        return;
       case 'paintSync': {
         // 「この人のペイントを全部ください」（とちゅうでとどかなかった分をそろえる）
         const q = players.get(msg.id);

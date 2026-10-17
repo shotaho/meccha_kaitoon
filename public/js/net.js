@@ -10,6 +10,10 @@
 import { createRoom } from './room.js';
 
 const PREFIX = 'meccha-kaitoon-room-';
+// 位置（tf）は新しいものだけあればよい。回線がつまっているときは古いものをすてる
+const isTf = (s) => s.startsWith('{"t":"tf"');
+const dcBuffered = (dc) => dc.dataChannel?.bufferedAmount ?? 0;
+const DC_BACKLOG = 16 * 1024;
 const CHUNK = 15000; // DataChannel の1メッセージの大きさを抑える
 
 export async function detectServer() {
@@ -177,12 +181,22 @@ class RelayConn {
     this.qt = 0;
     this.onData = null;
     this.onClose = null;
-    // 生きているよの合図。10 秒へんじがなければ切れたとみなす
+    this.rtt = 0; // 往復にかかる時間（ms）。中継がこんでいると大きくなる
+    this.tfPending = null;
+    this.tfAt = 0;
+    this.tfTimer = 0;
+    // 生きているよの合図（時刻つき）。10 秒へんじがなければ切れたとみなす
     this.timer = setInterval(() => {
       if (this.closed) return;
-      this._pub({ p: 1 });
+      this._pub({ p: 1, ts: Date.now() });
       if (this.open && Date.now() - this.rx > 10000) this.close();
-    }, 2000);
+    }, 1000);
+  }
+
+  // こみぐあいに合わせて、位置を送るあいだをあける
+  _tfGap() {
+    // 本当につまっているときだけ間をあける（重い端末だと少しおそめに出るので、ゆるめにする）
+    return this.rtt < 2500 ? 100 : this.rtt < 5000 ? 250 : 500;
   }
 
   _pub(o) {
@@ -192,9 +206,31 @@ class RelayConn {
     } catch {}
   }
 
-  // 公開サーバーは送る回数が多いと間引くことがあるので、50 ミリ秒ぶんをまとめて送る
+  // 公開サーバーは送る回数が多いと間引くことがあるので、100 ミリ秒ぶんをまとめて送る
   send(s) {
     if (!this.open) return;
+    if (isTf(s)) {
+      // 位置はいちばん新しいものだけ。前に送ってから間がなければ、あとでまとめて送る
+      this.tfPending = s;
+      const wait = this.tfAt + this._tfGap() - Date.now();
+      if (wait <= 0) this._sendTf();
+      else if (!this.tfTimer) this.tfTimer = setTimeout(() => this._sendTf(), wait);
+      return;
+    }
+    this._queue(s);
+  }
+
+  _sendTf() {
+    clearTimeout(this.tfTimer);
+    this.tfTimer = 0;
+    if (!this.tfPending || this.closed) return;
+    const s = this.tfPending;
+    this.tfPending = null;
+    this.tfAt = Date.now();
+    this._queue(s);
+  }
+
+  _queue(s) {
     if (s.length > RELAY_CHUNK) {
       this._flush();
       const id = randId();
@@ -205,7 +241,7 @@ class RelayConn {
     this.q.push(s);
     this.qLen += s.length;
     if (this.qLen > 16000) this._flush();
-    else if (!this.qt) this.qt = setTimeout(() => this._flush(), 50);
+    else if (!this.qt) this.qt = setTimeout(() => this._flush(), 100);
   }
 
   _flush() {
@@ -221,6 +257,15 @@ class RelayConn {
   recv(o) {
     this.rx = Date.now();
     if (o.bye) return this.close(true);
+    if (o.p) {
+      if (o.ts) this._pub({ pr: o.ts });
+      return;
+    }
+    if (o.pr) {
+      const r = Date.now() - o.pr;
+      this.rtt = this.rtt ? this.rtt * 0.6 + r * 0.4 : r;
+      return;
+    }
     if (typeof o.m === 'string') return this.onData?.(o.m);
     if (Array.isArray(o.ms)) {
       for (const m of o.ms) if (typeof m === 'string') this.onData?.(m);
@@ -248,6 +293,7 @@ class RelayConn {
     this.open = false;
     clearInterval(this.timer);
     clearTimeout(this.qt);
+    clearTimeout(this.tfTimer);
     this._end?.();
     this.onClose?.();
   }
@@ -449,6 +495,7 @@ export function hostP2P(code, shareUrl, cb, fresh = false) {
         if (!room) return dc.close();
         const h = room.addConnection({
           send: (s) => {
+            if (isTf(s) && dcBuffered(dc) > DC_BACKLOG) return;
             try {
               sendStr(dc, s);
             } catch {}
@@ -564,6 +611,7 @@ export function joinP2P(code, cb) {
       relayTry = null;
       if (closed) return conn.close();
       rconn = conn;
+      scheduleUpgrade();
       conn.onData = (s) => cb.onMessage(JSON.parse(s));
       conn.onClose = () => {
         if (closed || rconn !== conn) return;
@@ -580,6 +628,54 @@ export function joinP2P(code, cb) {
       cb.onStatus?.('ホストをさがしています…');
       clearTimeout(retryTimer);
       retryTimer = setTimeout(startRelay, 4000);
+    });
+  }
+
+  // ----- 中継でつながったあとも、ときどき直接つなげないかためす（つながったら切りかえる） -----
+  let upgradeTimer = null;
+  let upPeer = null;
+  function scheduleUpgrade() {
+    if (!Peer || relayOnly() || closed) return;
+    clearTimeout(upgradeTimer);
+    upgradeTimer = setTimeout(tryUpgrade, 20000);
+  }
+  function tryUpgrade() {
+    if (closed || mode !== 'relay' || !rconn) return;
+    try {
+      upPeer?.destroy();
+    } catch {}
+    const pr = new Peer(peerOptions());
+    upPeer = pr;
+    const giveUp = setTimeout(() => {
+      if (upPeer === pr && mode === 'relay') {
+        pr.destroy();
+        scheduleUpgrade();
+      }
+    }, 15000);
+    pr.on('error', () => {});
+    pr.on('open', () => {
+      const d = pr.connect(PREFIX + code, { reliable: true, serialization: 'raw' });
+      d.on('open', () => {
+        if (closed || mode !== 'relay' || upPeer !== pr) return d.close();
+        clearTimeout(giveUp);
+        // 直接にきりかえる
+        mode = 'direct';
+        peer = pr;
+        upPeer = null;
+        dc = d;
+        const old = rconn;
+        rconn = null;
+        old?.close();
+        d.on('data', receiver((s) => cb.onMessage(JSON.parse(s))));
+        d.on('close', () => {
+          if (closed || d !== dc || mode !== 'direct') return;
+          cb.onClose();
+          retry(2000);
+        });
+        pr.on('disconnected', () => retry(1500));
+        cb.onStatus?.('ちょくせつつながりました');
+        opened();
+      });
     });
   }
 
@@ -646,6 +742,7 @@ export function joinP2P(code, cb) {
       if (mode === 'relay') {
         if (rconn && rconn.open) rconn.send(s);
       } else if (dc && dc.open) {
+        if (isTf(s) && dcBuffered(dc) > DC_BACKLOG) return;
         try {
           sendStr(dc, s);
         } catch {}
@@ -655,6 +752,8 @@ export function joinP2P(code, cb) {
       closed = true;
       clearTimeout(retryTimer);
       clearTimeout(fallbackTimer);
+      clearTimeout(upgradeTimer);
+      upPeer?.destroy();
       relayTry?.cancel();
       rconn?.close();
       peer?.destroy();
