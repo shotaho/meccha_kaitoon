@@ -1,7 +1,9 @@
 // 通信まわり。2つの方式に対応する。
 //  - server: Node.js サーバー（server.js）に WebSocket でつなぐ（LAN版）
 //  - p2p:    GitHub Pages など静的ホスティング用。ホストのブラウザが部屋（room.js）を動かし、
-//            他のプレイヤーは WebRTC（PeerJS）でホストに直接つなぐ
+//            他のプレイヤーは WebRTC（PeerJS）でホストに直接つなぐ。
+//            直接つながらないとき（ルーターや端末の組み合わせによる）は、
+//            ① TURN サーバーを通す ② 公開のメッセージサーバー（MQTT）で中継する、の順にためす
 //
 // どの方式も link = { send(obj), close() } を返し、cb.onOpen / onMessage / onClose / onError / onStatus を呼ぶ。
 
@@ -96,17 +98,287 @@ function receiver(fn) {
   };
 }
 
+// 2台の間で直接つながれないときのために、STUN と中継（TURN）サーバーを複数用意する。
+// UDP がだめなときのために TCP（80・443 番）でもつなげるようにする
+const ICE_SERVERS = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  {
+    urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478', 'turn:eu-0.turn.peerjs.com:3478?transport=tcp', 'turn:us-0.turn.peerjs.com:3478?transport=tcp'],
+    username: 'peerjs',
+    credential: 'peerjsp',
+  },
+  {
+    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443?transport=tcp'],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+];
+
 // ?peerserver=https://example.com:9000/ でシグナリングサーバーを差し替えられる（自前の PeerJS サーバー用）
 function peerOptions() {
+  const opts = { config: { sdpSemantics: 'unified-plan', iceServers: ICE_SERVERS } };
   const v = new URLSearchParams(location.search).get('peerserver');
-  if (!v) return {};
+  if (!v) return opts;
   try {
     const u = new URL(v);
     const secure = u.protocol === 'https:';
-    return { host: u.hostname, port: Number(u.port) || (secure ? 443 : 80), path: u.pathname || '/', secure };
+    return { ...opts, host: u.hostname, port: Number(u.port) || (secure ? 443 : 80), path: u.pathname || '/', secure };
   } catch {
-    return {};
+    return opts;
   }
+}
+
+// ---------------------------------------------------------------------------
+// 中継モード（MQTT）
+//   直接つながれないときは、公開のメッセージサーバーを通してやりとりする。
+//   ホストは部屋を作ったら中継でも待ち受け、ゲストは直接つながれなかったら中継で入る。
+//   ?relayurl=wss://example.com/mqtt でサーバーを変えられる、?relay=only で最初から中継
+// ---------------------------------------------------------------------------
+
+const QS = new URLSearchParams(location.search);
+const RELAY_URLS = /^wss?:/.test(QS.get('relayurl') || '') ? [QS.get('relayurl')] : ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+const relayOnly = () => QS.get('relay') === 'only';
+const relayTopic = (code, to) => `${PREFIX}v1/relay/${code}/${to}`;
+const randId = () => Math.random().toString(36).slice(2, 10);
+const RELAY_CHUNK = 20000;
+
+let mqttLoading = null;
+function loadMqtt() {
+  if (window.mqtt) return Promise.resolve(window.mqtt);
+  if (!mqttLoading) {
+    mqttLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = new URL('../vendor/mqtt.min.js', import.meta.url).href;
+      s.onload = () => (window.mqtt ? resolve(window.mqtt) : reject(new Error('mqtt')));
+      s.onerror = () => {
+        mqttLoading = null;
+        reject(new Error('mqtt'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return mqttLoading;
+}
+
+// 中継の通路。send(文字列) / onData / onClose / close()
+class RelayConn {
+  constructor(client, pubTopic, sid, isHost) {
+    this.client = client;
+    this.pub = pubTopic;
+    this.sid = sid;
+    this.isHost = isHost;
+    this.open = false;
+    this.closed = false;
+    this.rx = Date.now();
+    this.parts = new Map();
+    this.q = [];
+    this.qLen = 0;
+    this.qt = 0;
+    this.onData = null;
+    this.onClose = null;
+    // 生きているよの合図。10 秒へんじがなければ切れたとみなす
+    this.timer = setInterval(() => {
+      if (this.closed) return;
+      this._pub({ p: 1 });
+      if (this.open && Date.now() - this.rx > 10000) this.close();
+    }, 2000);
+  }
+
+  _pub(o) {
+    if (!this.isHost) o._s = this.sid;
+    try {
+      this.client.publish(this.pub, JSON.stringify(o));
+    } catch {}
+  }
+
+  // 公開サーバーは送る回数が多いと間引くことがあるので、50 ミリ秒ぶんをまとめて送る
+  send(s) {
+    if (!this.open) return;
+    if (s.length > RELAY_CHUNK) {
+      this._flush();
+      const id = randId();
+      const n = Math.ceil(s.length / RELAY_CHUNK);
+      for (let i = 0; i < n; i++) this._pub({ c: id, i, n, d: s.slice(i * RELAY_CHUNK, (i + 1) * RELAY_CHUNK) });
+      return;
+    }
+    this.q.push(s);
+    this.qLen += s.length;
+    if (this.qLen > 16000) this._flush();
+    else if (!this.qt) this.qt = setTimeout(() => this._flush(), 50);
+  }
+
+  _flush() {
+    clearTimeout(this.qt);
+    this.qt = 0;
+    if (!this.q.length || this.closed) return;
+    const q = this.q;
+    this.q = [];
+    this.qLen = 0;
+    this._pub(q.length === 1 ? { m: q[0] } : { ms: q });
+  }
+
+  recv(o) {
+    this.rx = Date.now();
+    if (o.bye) return this.close(true);
+    if (typeof o.m === 'string') return this.onData?.(o.m);
+    if (Array.isArray(o.ms)) {
+      for (const m of o.ms) if (typeof m === 'string') this.onData?.(m);
+      return;
+    }
+    if (o.c) {
+      let e = this.parts.get(o.c);
+      if (!e) this.parts.set(o.c, (e = { got: 0, arr: new Array(o.n) }));
+      if (e.arr[o.i] == null) e.got++;
+      e.arr[o.i] = o.d;
+      if (e.got === o.n) {
+        this.parts.delete(o.c);
+        this.onData?.(e.arr.join(''));
+      }
+    }
+  }
+
+  close(remoteSaid) {
+    if (this.closed) return;
+    if (!remoteSaid) {
+      this._flush();
+      this._pub({ bye: 1 });
+    }
+    this.closed = true;
+    this.open = false;
+    clearInterval(this.timer);
+    clearTimeout(this.qt);
+    this._end?.();
+    this.onClose?.();
+  }
+}
+
+// ホスト：中継サーバーで待ち受ける。onGuest(conn) で新しいゲストを渡す
+function relayHost(code, onGuest, onLog) {
+  const items = [];
+  let stopped = false;
+  loadMqtt()
+    .then((mqtt) => {
+      if (stopped) return;
+      for (const url of RELAY_URLS) {
+        let cl;
+        try {
+          cl = mqtt.connect(url, { clientId: 'mk' + randId(), clean: true, connectTimeout: 8000, reconnectPeriod: 4000 });
+        } catch {
+          continue;
+        }
+        const conns = new Map();
+        items.push({ cl, conns });
+        cl.on('connect', () => cl.subscribe(relayTopic(code, 'h')));
+        cl.on('message', (_t, buf) => {
+          let o;
+          try {
+            o = JSON.parse(buf.toString());
+          } catch {
+            return;
+          }
+          if (!o || typeof o._s !== 'string') return;
+          let c = conns.get(o._s);
+          if (o.hello) {
+            if (c && !c.closed) c.close(true);
+            const sid = o._s;
+            c = new RelayConn(cl, relayTopic(code, 'g/' + sid), sid, true);
+            conns.set(sid, c);
+            const me = c;
+            c._end = () => conns.get(sid) === me && conns.delete(sid);
+            c._pub({ welcome: 1 });
+            c.open = true;
+            onGuest(c);
+            return;
+          }
+          if (c) c.recv(o);
+        });
+      }
+    })
+    .catch(() => onLog?.('ちゅうけいのぶひんをよみこめませんでした'));
+  return {
+    stop() {
+      stopped = true;
+      for (const it of items) {
+        for (const c of it.conns.values()) c.close();
+        try {
+          it.cl.end(true);
+        } catch {}
+      }
+    },
+  };
+}
+
+// ゲスト：中継サーバーを順番にためし、部屋（ホスト）から返事が来たらつながる
+function relayJoin(code, onConn, onFail) {
+  let i = 0;
+  let cancelled = false;
+  let cur = null;
+  const next = (mqtt) => {
+    if (cancelled) return;
+    if (i >= RELAY_URLS.length) return onFail();
+    const url = RELAY_URLS[i++];
+    const sid = randId();
+    let done = false;
+    let cl;
+    try {
+      cl = mqtt.connect(url, { clientId: 'mk' + sid, clean: true, connectTimeout: 8000, reconnectPeriod: 0 });
+    } catch {
+      return next(mqtt);
+    }
+    cur = cl;
+    const conn = new RelayConn(cl, relayTopic(code, 'h'), sid, false);
+    const giveUp = () => {
+      if (done) return;
+      done = true;
+      conn.closed = true;
+      clearInterval(conn.timer);
+      try {
+        cl.end(true);
+      } catch {}
+      next(mqtt);
+    };
+    const to = setTimeout(giveUp, 9000);
+    cl.on('connect', () => cl.subscribe(relayTopic(code, 'g/' + sid), () => conn._pub({ hello: 1 })));
+    cl.on('error', () => {});
+    cl.on('close', () => {
+      if (!done) {
+        clearTimeout(to);
+        giveUp();
+      } else if (conn.open) conn.close(true);
+    });
+    cl.on('message', (_t, buf) => {
+      let o;
+      try {
+        o = JSON.parse(buf.toString());
+      } catch {
+        return;
+      }
+      if (o.welcome) {
+        if (done || cancelled) return;
+        done = true;
+        clearTimeout(to);
+        conn.open = true;
+        conn._end = () => {
+          try {
+            cl.end(true);
+          } catch {}
+        };
+        onConn(conn);
+        return;
+      }
+      conn.recv(o);
+    });
+  };
+  loadMqtt().then(next, () => onFail());
+  return {
+    cancel() {
+      cancelled = true;
+      try {
+        cur?.end(true);
+      } catch {}
+    },
+  };
 }
 
 function PeerCtor() {
@@ -137,30 +409,44 @@ export function localRoom(cb) {
 }
 
 // 部屋を作る（このブラウザがホストになる）。fresh = 新しく作る部屋（番号が使用中なら cb.onIdTaken）
+// 直接（PeerJS）と中継（MQTT）の両方で待ち受ける
 export function hostP2P(code, shareUrl, cb, fresh = false) {
   const Peer = PeerCtor();
   let peer = null;
   let room = null;
   let local = null;
+  let relay = null;
   let closed = false;
   let attempts = 0;
+  let fallbackTimer = null;
+
+  // 部屋をつくってホスト自身をつなぐ（直接の待ち受けがまだでも、中継だけで始められる）
+  function ensureRoom() {
+    if (room || closed) return;
+    clearTimeout(fallbackTimer);
+    room = createRoom({ getUrls: () => [shareUrl] });
+    // ホスト自身もプレイヤーとして、部屋に直接（ネットワークを通さず）つなぐ
+    local = room.addConnection({
+      send: (s) => queueMicrotask(() => cb.onMessage(JSON.parse(s))),
+      close() {},
+    });
+    relay = relayHost(code, (conn) => {
+      const h = room.addConnection({ send: (s) => conn.send(s), close: () => conn.close() });
+      conn.onData = (s) => h.message(s);
+      conn.onClose = () => h.close();
+    }, (t) => cb.onStatus?.(t));
+    cb.onOpen();
+  }
 
   function start() {
     peer = new Peer(PREFIX + code, peerOptions());
     peer.on('open', () => {
       attempts = 0;
-      if (!room) {
-        room = createRoom({ getUrls: () => [shareUrl] });
-        // ホスト自身もプレイヤーとして、部屋に直接（ネットワークを通さず）つなぐ
-        local = room.addConnection({
-          send: (s) => queueMicrotask(() => cb.onMessage(JSON.parse(s))),
-          close() {},
-        });
-        cb.onOpen();
-      }
+      ensureRoom();
     });
     peer.on('connection', (dc) => {
       dc.on('open', () => {
+        if (!room) return dc.close();
         const h = room.addConnection({
           send: (s) => {
             try {
@@ -183,6 +469,7 @@ export function hostP2P(code, shareUrl, cb, fresh = false) {
       if (err.type === 'unavailable-id' && !room) {
         if (fresh) {
           // 新しく作ろうとした番号が他の部屋で使われていた
+          clearTimeout(fallbackTimer);
           peer.destroy();
           closed = true;
           return cb.onIdTaken?.();
@@ -193,14 +480,14 @@ export function hostP2P(code, shareUrl, cb, fresh = false) {
           peer.destroy();
           setTimeout(() => !closed && start(), 2500);
         } else {
-          cb.onError('そのへやばんごうはつかわれています。べつのへやをつくってね');
+          ensureRoom(); // 直接はあきらめて中継だけで
         }
         return;
       }
-      if (err.type === 'browser-incompatible') return cb.onError('このブラウザはP2Pつうしんにたいおうしていません');
+      if (err.type === 'browser-incompatible') return ensureRoom();
       if (RETRY_TYPES.has(err.type)) {
         cb.onStatus?.('サーバーとのせつぞくがふあんていです…');
-        if (!room) {
+        if (!room || peer.destroyed) {
           peer.destroy();
           setTimeout(() => !closed && start(), 3000);
         }
@@ -210,6 +497,18 @@ export function hostP2P(code, shareUrl, cb, fresh = false) {
     });
   }
   start();
+  // 直接の待ち受けがなかなか始まらないときは、中継だけで部屋をひらく
+  fallbackTimer = setTimeout(() => {
+    if (room || closed) return;
+    cb.onStatus?.('ちゅうけいモードでへやをひらきました');
+    ensureRoom();
+  }, relayOnly() ? 0 : 8000);
+
+  // iPhone などは画面を消すとサーバーとの接続が切れるので、もどったらつなぎ直す
+  const onVis = () => {
+    if (document.visibilityState === 'visible' && peer && peer.disconnected && !peer.destroyed && !closed) peer.reconnect();
+  };
+  document.addEventListener('visibilitychange', onVis);
 
   return {
     send(obj) {
@@ -219,25 +518,76 @@ export function hostP2P(code, shareUrl, cb, fresh = false) {
     },
     close() {
       closed = true;
+      clearTimeout(fallbackTimer);
+      document.removeEventListener('visibilitychange', onVis);
+      relay?.stop();
       peer?.destroy();
       room?.destroy();
     },
   };
 }
 
-// 部屋に入る
+// 部屋に入る。まず直接（PeerJS）でつなぎ、だめなら中継（MQTT）でつなぐ
 export function joinP2P(code, cb) {
-  const Peer = PeerCtor();
+  let Peer = null;
+  try {
+    Peer = PeerCtor();
+  } catch {}
   let peer = null;
   let dc = null;
+  let rconn = null; // 中継の通路
+  let relayTry = null;
+  let mode = relayOnly() || !Peer ? 'relay' : 'direct';
   let closed = false;
   let everOpened = false;
   let retryTimer = null;
+  let fallbackTimer = null;
 
+  function opened() {
+    everOpened = true;
+    clearTimeout(fallbackTimer);
+    globalThis.__mcNetMode = mode; // テスト・調査用（direct / relay）
+    cb.onOpen();
+  }
+
+  // ----- 中継 -----
+  function startRelay() {
+    if (closed || relayTry || (rconn && rconn.open)) return;
+    mode = 'relay';
+    clearTimeout(fallbackTimer);
+    // 直接のほうはやめる
+    try {
+      peer?.destroy();
+    } catch {}
+    cb.onStatus?.('ちょくせつつながらないので、ちゅうけいでつないでいます…');
+    relayTry = relayJoin(code, (conn) => {
+      relayTry = null;
+      if (closed) return conn.close();
+      rconn = conn;
+      conn.onData = (s) => cb.onMessage(JSON.parse(s));
+      conn.onClose = () => {
+        if (closed || rconn !== conn) return;
+        rconn = null;
+        cb.onClose();
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(startRelay, 2000);
+      };
+      opened();
+    }, () => {
+      relayTry = null;
+      if (closed) return;
+      if (!everOpened) return cb.onError(`へや「${code}」につながりませんでした。ばんごうをかくにんしてね`);
+      cb.onStatus?.('ホストをさがしています…');
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(startRelay, 4000);
+    });
+  }
+
+  // ----- 直接 -----
   function retry(ms) {
     clearTimeout(retryTimer);
     retryTimer = setTimeout(() => {
-      if (closed) return;
+      if (closed || mode !== 'direct') return;
       if (!peer || peer.destroyed) startPeer();
       else if (peer.disconnected) peer.reconnect();
       else connectDc();
@@ -248,15 +598,17 @@ export function joinP2P(code, cb) {
     const d = peer.connect(PREFIX + code, { reliable: true, serialization: 'raw' });
     dc = d;
     d.on('open', () => {
-      everOpened = true;
-      cb.onOpen();
+      if (mode !== 'direct') return d.close();
+      opened();
     });
     d.on('data', receiver((s) => cb.onMessage(JSON.parse(s))));
     d.on('close', () => {
-      if (closed || d !== dc) return;
+      if (closed || d !== dc || mode !== 'direct') return;
       cb.onClose();
       retry(2000);
     });
+    // つながりかけたまま止まる（ICE がとおらない）ときは中継へ
+    d.on('error', () => !everOpened && startRelay());
   }
 
   function startPeer() {
@@ -264,33 +616,47 @@ export function joinP2P(code, cb) {
     peer.on('open', connectDc);
     peer.on('disconnected', () => retry(1500));
     peer.on('error', (err) => {
-      if (closed) return;
+      if (closed || mode !== 'direct') return;
       if (err.type === 'peer-unavailable') {
-        if (!everOpened) return cb.onError(`へや「${code}」がみつかりません。ばんごうをかくにんしてね`);
+        // 直接の待ち受けがない部屋（ホストが中継だけ）かもしれない
+        if (!everOpened) return startRelay();
         cb.onStatus?.('ホストをさがしています…');
         return retry(3000);
       }
-      if (err.type === 'browser-incompatible') return cb.onError('このブラウザはP2Pつうしんにたいおうしていません');
+      if (err.type === 'browser-incompatible') return startRelay();
       cb.onStatus?.('せつぞくがふあんていです…');
       if (RETRY_TYPES.has(err.type)) {
         peer.destroy();
+        if (!everOpened) return startRelay();
         retry(3000);
       }
     });
   }
-  startPeer();
+
+  if (mode === 'relay') startRelay();
+  else {
+    startPeer();
+    // 8 秒たってもつながらなければ中継にきりかえる
+    fallbackTimer = setTimeout(() => !everOpened && startRelay(), 8000);
+  }
 
   return {
     send(obj) {
-      if (dc && dc.open) {
+      const s = JSON.stringify(obj);
+      if (mode === 'relay') {
+        if (rconn && rconn.open) rconn.send(s);
+      } else if (dc && dc.open) {
         try {
-          sendStr(dc, JSON.stringify(obj));
+          sendStr(dc, s);
         } catch {}
       }
     },
     close() {
       closed = true;
       clearTimeout(retryTimer);
+      clearTimeout(fallbackTimer);
+      relayTry?.cancel();
+      rconn?.close();
       peer?.destroy();
     },
   };

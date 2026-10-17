@@ -15,6 +15,12 @@
 
 - ホストのブラウザがゲームの進行役になり、他の人は WebRTC（P2P）でホストに直接つながります。
   つなぐときだけ PeerJS の無料シグナリングサーバーを使うので、インターネット接続が必要です。
+- 直接つながれないとき（ルーターや端末の組み合わせによる）にそなえて、次の順にためします。
+  1. TURN サーバー（peerjs・openrelay）を通して WebRTC でつなぐ
+  2. それでもだめなら（8秒たってもつながらないとき）、公開のメッセージサーバー（MQTT：broker.emqx.io / broker.hivemq.com）を通して中継する。
+     ホストは部屋を作ると、直接と中継の両方で待ち受けます。PeerJS のサーバーにつながらないときも、中継だけで部屋をひらきます
+- 中継は公開サーバーを通るので、部屋の中のやりとり（位置・ペイント）は第三者にも見える可能性があります。
+- テスト用：`?relay=only` で最初から中継、`?relayurl=wss://…/mqtt` で中継サーバーを変えられます。
   同じWiFiでなくても遊べます（回線によってはつながらないことがあります）。
 - **ホストは画面を閉じたり、別のタブ・アプリに切り替えたままにしないでください**（部屋がなくなる／動きが止まる）。
   できればPCでホストしてください。
@@ -30,7 +36,7 @@
 npm start        # または node server.js
 ```
 
-- 必要なのは Node.js 18 以上だけ（npm install 不要。three.js・PeerJS は `public/vendor` に同梱）
+- 必要なのは Node.js 18 以上だけ（npm install 不要。three.js・PeerJS・MQTT.js は `public/vendor` に同梱）
 - 起動するとターミナルに `http://192.168.x.x:3000` のようなアドレスが出るので、
   同じWiFiにつないだ端末のブラウザでそのアドレスを開けば参加できます（1〜16人。1人ならCPUと対戦）
 - ポートを変える場合は `PORT=8080 npm start`
@@ -101,7 +107,7 @@ npm start        # または node server.js
 ## 構成
 
 - `public/js/room.js` … 部屋のゲーム進行（フェーズ・判定・ペイント履歴）。LAN サーバーでもホストのブラウザでも同じコードが動く
-- `public/js/net.js` … 通信（LAN版は WebSocket、GitHub Pages 版は PeerJS による WebRTC）
+- `public/js/net.js` … 通信（LAN版は WebSocket、GitHub Pages 版は PeerJS による WebRTC＋TURN、つながらないときは MQTT で中継）
 - `server.js` … LAN 版の HTTP + WebSocket サーバー（依存なしの自前実装）
 - `public/js/maps.js` … ステージの共通データ（出現位置・CPU の隠れ場所・ブロック地形の生成）
 - `public/js/world.js` … ステージの組み立て（家具・当たり判定）

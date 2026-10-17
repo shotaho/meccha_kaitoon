@@ -210,8 +210,10 @@ function defaultName() {
 
 function shareUrl(code) {
   const q = new URLSearchParams({ room: code });
-  const ps = new URLSearchParams(location.search).get('peerserver');
-  if (ps) q.set('peerserver', ps);
+  for (const k of ['peerserver', 'relayurl']) {
+    const v = new URLSearchParams(location.search).get(k);
+    if (v) q.set(k, v);
+  }
   return `${location.origin}${location.pathname}?${q}`;
 }
 
