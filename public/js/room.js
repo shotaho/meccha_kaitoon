@@ -56,6 +56,22 @@ function makeId() {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+// ペイントのまとめ（数＋チェック用の値）。ホストと各画面で同じものになっていればそろっている
+export function opsDigest(ops) {
+  let h = 0x811c9dc5;
+  const add = (str) => {
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+  };
+  for (const op of ops || []) {
+    const pts = op.pts || [];
+    add(`${op.k}|${op.g}|${op.p}|${op.c}|${op.r}|${pts.length}|${pts[0]}|${pts[pts.length - 1]};`);
+  }
+  return `${(ops || []).length}:${h.toString(36)}`;
+}
+
 function sanitizeOp(op) {
   if (!op || typeof op !== 'object') return null;
   const g = Number(op.g) || 0;
@@ -371,7 +387,22 @@ export function createRoom({ getUrls = () => [] } = {}) {
           return;
         }
         p.ops.push(...ops);
-        broadcast({ t: 'paint', id: p.id, ops }, p.id);
+        // n：ここまでの数。受け取った側は数が合わなければ全部を取りなおす
+        broadcast({ t: 'paint', id: p.id, ops, n: p.ops.length }, p.id);
+        return;
+      }
+      case 'paintSync': {
+        // 「この人のペイントを全部ください」（とちゅうでとどかなかった分をそろえる）
+        const q = players.get(msg.id);
+        if (!q) return;
+        send(p, { t: 'paintReset', id: q.id, ops: q.ops });
+        return;
+      }
+      case 'paintFull': {
+        // ぬった本人から、自分のペイントを全部送りなおしてもらう
+        if (!canPaint(p) || !Array.isArray(msg.ops)) return;
+        p.ops = msg.ops.slice(0, MAX_OPS_PER_PLAYER).map(sanitizeOp).filter(Boolean);
+        broadcast({ t: 'paintReset', id: p.id, ops: p.ops }, p.id);
         return;
       }
       case 'undo': {
@@ -578,6 +609,16 @@ export function createRoom({ getUrls = () => [] } = {}) {
       },
     };
   }
+
+  // 2 秒ごとに、かくれる人のペイントのまとめを配る（とどかなかった分があれば各画面がそろえなおす）
+  timers.push(
+    setInterval(() => {
+      if (phase !== 'prep' && phase !== 'hunt') return;
+      const sums = {};
+      for (const p of players.values()) if (p.role === 'hider' && !p.cpu) sums[p.id] = opsDigest(p.ops);
+      if (Object.keys(sums).length) broadcast({ t: 'paintSum', sums });
+    }, 2000),
+  );
 
   function destroy() {
     for (const t of timers) {

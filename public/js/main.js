@@ -7,6 +7,7 @@ import { paintCamo } from './camo.js';
 import { createCpuBrains } from './cpu.js';
 import { Character, POSES, PARTS, BODY_RADIUS } from './character.js';
 import { detectServer, connectServer, hostP2P, joinP2P, localRoom, makeRoomCode, normalizeCode } from './net.js';
+import { opsDigest } from './room.js';
 
 // ===========================================================================
 // 小物
@@ -349,8 +350,13 @@ function onMessage(m) {
       opsById.set(m.id, list);
       const c = chars.get(m.id);
       if (c) for (const op of m.ops) c.applyOp(op);
+      // とちゅうでとどかなかった分がある → 全部を取りなおす
+      if (typeof m.n === 'number' && list.length !== m.n) requestPaintSync(m.id);
       break;
     }
+    case 'paintSum':
+      checkPaintSums(m.sums || {});
+      break;
     case 'paintReset':
       opsById.set(m.id, m.ops);
       chars.get(m.id)?.replay(m.ops);
@@ -971,6 +977,34 @@ function redo() {
   if (curGroup || !redoStack.length) return;
   const g = redoStack.pop();
   commitGroup(g.ops.map((op) => ({ ...op })));
+}
+
+// ----- ペイントのずれをなおす -----
+const syncAskedAt = new Map();
+function requestPaintSync(id) {
+  const now = performance.now();
+  if (now - (syncAskedAt.get(id) || -1e9) < 1500) return;
+  syncAskedAt.set(id, now);
+  send({ t: 'paintSync', id });
+}
+let myPaintMismatch = 0;
+function checkPaintSums(sums) {
+  for (const [id, sum] of Object.entries(sums)) {
+    if (id === myId) {
+      // ぬっているとちゅう・送るまえの分があるときはくらべない
+      if (curGroup || pendingOps.length || stroke) continue;
+      const mine = opsById.get(myId) || [];
+      if (opsDigest(mine) === sum) {
+        myPaintMismatch = 0;
+      } else if (++myPaintMismatch >= 2) {
+        // ホストに自分のペイントがとどいていない → 全部送りなおす
+        myPaintMismatch = 0;
+        send({ t: 'paintFull', ops: mine });
+      }
+    } else if (opsDigest(opsById.get(id) || []) !== sum) {
+      requestPaintSync(id);
+    }
+  }
 }
 
 function flushPaint() {
@@ -1854,4 +1888,4 @@ requestAnimationFrame(step);
 })();
 
 // テスト・デバッグ用
-window.__mc = { get S() { return S; }, self, chars, orbit, free, setTool, setHiderMode, shoot, get viewMode() { return viewMode; } };
+window.__mc = { get S() { return S; }, self, chars, orbit, free, setTool, setHiderMode, shoot, opsById, get myId() { return myId; }, get viewMode() { return viewMode; } };
