@@ -52,6 +52,16 @@ export function createCpuBrains(ctx) {
   function pickTarget(b, world, mapId) {
     const nav = MAPS[mapId].nav;
     let best = null;
+    // アイテムモード：ときどき、まだあいていないたからばこへ行く
+    const S = ctx.getState();
+    const closed = S?.settings?.items ? (S.chests || []).filter((c) => !c.open) : [];
+    if (closed.length && Math.random() < 0.35) {
+      const c = closed[Math.floor(Math.random() * closed.length)];
+      b.target = new THREE.Vector3(...c.p);
+      b.stuck = 0;
+      b.path = [];
+      return;
+    }
     for (let i = 0; i < 6; i++) {
       const p = nav[Math.floor(Math.random() * nav.length)];
       const d = Math.hypot(p[0] - b.pos.x, p[2] - b.pos.z);
@@ -120,6 +130,37 @@ export function createCpuBrains(ctx) {
         brains.set(p.id, b);
       }
       b.time += dt;
+
+      // ----- アイテムモード -----
+      if (S.settings.items) {
+        // たたかれてふらふら・やられたときは動かない
+        if (p.down || p.stun) continue;
+        if (!p.item && !(b.openT > b.time)) {
+          const c = (S.chests || []).find((x) => !x.open && Math.hypot(x.p[0] - b.pos.x, x.p[2] - b.pos.z) < 1.8);
+          if (c) {
+            ctx.send({ t: 'cpu', id: p.id, msg: { t: 'open', id: c.id } });
+            b.openT = b.time + 1.5;
+          }
+        }
+        if (p.item?.k === 'whistle' && !(b.useT > b.time)) {
+          ctx.send({ t: 'cpu', id: p.id, msg: { t: 'use' } });
+          b.useT = b.time + 2;
+        }
+        // くちぶえがきこえたら、いちばん近い人のほうへ
+        if (b.mode === 'wander' && ctx.whistling) {
+          let near = null;
+          for (const id of ctx.whistling()) {
+            const tc = ctx.chars.get(id);
+            if (!tc) continue;
+            const d = tc.root.position.distanceTo(b.pos);
+            if (!near || d < near.d) near = { d, p: tc.root.position };
+          }
+          if (near && near.d > 2) {
+            b.target = near.p.clone();
+            b.path = [];
+          }
+        }
+      }
 
       // ----- 目標を決める -----
       let goal = b.target;
@@ -248,7 +289,7 @@ export function createCpuBrains(ctx) {
         if (tc && b.reactT <= 0) {
           const c = centerOf(tc);
           if (eye.distanceTo(c) < 9 && lineOfSight(world, eye, c)) {
-            ctx.send({ t: 'cpu', id: p.id, msg: { t: 'shoot', target: b.chaseId, point: c.toArray().map((v) => +v.toFixed(3)) } });
+            ctx.send({ t: 'cpu', id: p.id, msg: { t: 'shoot', target: b.chaseId, point: c.toArray().map((v) => +v.toFixed(3)), shotgun: (S.settings.items && p.item?.k === 'shotgun') || undefined } });
             b.mode = 'wander';
             b.chaseId = null;
             pickTarget(b, world, mapId);

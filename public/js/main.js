@@ -8,6 +8,7 @@ import { createCpuBrains } from './cpu.js';
 import { Character, POSES, PARTS, BODY_RADIUS } from './character.js';
 import { detectServer, connectServer, hostP2P, joinP2P, localRoom, makeRoomCode, normalizeCode } from './net.js';
 import { opsDigest } from './room.js';
+import { tex } from './textures.js';
 
 // ===========================================================================
 // 小物
@@ -292,6 +293,7 @@ function onMessage(m) {
       stateAt = performance.now();
       ensureWorld(S.settings.map);
       world.setDoors(S.doors);
+      syncChests();
       if (offline) {
         // CPU 戦の設定は次回のために覚えておく
         store.set('cpu.cpus', String(S.settings.cpus || 3));
@@ -308,10 +310,12 @@ function onMessage(m) {
       syncCharKinds();
       renderPanel();
       renderHud();
+      if (itemsOn()) renderTouch();
       if (viewMode === 'hider' && (S.phase === 'prep' || prevPhase !== S.phase)) renderTools(); // 「かくれたよ」の表示を更新
       break;
     }
     case 'round':
+      whistleUntil.clear();
       opsById.clear();
       groups = [];
       redoStack = [];
@@ -356,6 +360,18 @@ function onMessage(m) {
     }
     case 'paintSum':
       checkPaintSums(m.sums || {});
+      break;
+    case 'chest':
+      syncChests();
+      break;
+    case 'whistle':
+      onWhistle(m);
+      break;
+    case 'bonk':
+      onBonk(m);
+      break;
+    case 'swing':
+      if (m.from !== myId) chars.get(m.from)?.swing();
       break;
     case 'pong':
       showPing(performance.now() - m.c);
@@ -571,14 +587,214 @@ function nearDoor() {
   return best;
 }
 function toggleDoor() {
+  // たからばこがちかくにあれば、そちらをあける
+  const c = nearChest();
+  if (c) return send({ t: 'open', id: c.id });
   const d = nearDoor();
   if (d) send({ t: 'door', id: d.id });
   else if (MAPS[world.id]?.doors) toast('とびらのちかくでおしてね');
+  else if (itemsOn()) toast('たからばこのちかくでおしてね');
+}
+
+// ===========================================================================
+// アイテムモード（たからばこ・ショットガン・くちぶえブザー・バット）
+// ===========================================================================
+
+const itemsOn = () => !!S?.settings?.items;
+const ITEM_ICON = { shotgun: '🔫', whistle: '📣', bat: '🏏' };
+const ITEM_LABEL = { shotgun: 'ショットガン', whistle: 'くちぶえブザー', bat: 'バット' };
+
+function nearChest() {
+  if (!itemsOn() || S.phase !== 'hunt' || (viewMode !== 'hider' && viewMode !== 'fps')) return null;
+  let best = null;
+  for (const c of S.chests || []) {
+    if (c.open) continue;
+    const d = Math.hypot(self.pos.x - c.p[0], self.pos.z - c.p[2]);
+    if (d < 2.0 && Math.abs(self.pos.y - c.p[1]) < 2 && (!best || d < best.d)) best = { id: c.id, d };
+  }
+  return best;
+}
+
+function useItem() {
+  const it = me()?.item;
+  if (!itemsOn() || !it) return;
+  if (it.k === 'shotgun') return toast('ショットガンは、うつと自動でつかうよ（のこり ' + it.n + 'はつ）');
+  send({ t: 'use' });
+  if (it.k === 'bat') myChar()?.swing();
+}
+
+// たからばこの見た目
+const chestGroup = new THREE.Group();
+scene.add(chestGroup);
+const chestMeshes = new Map();
+let chestMat = null;
+function syncChests() {
+  const list = S && itemsOn() && (S.phase === 'prep' || S.phase === 'hunt' || S.phase === 'result') ? S.chests || [] : [];
+  const keep = new Set();
+  for (const c of list) {
+    const key = `${S.roundNo}:${c.id}`;
+    keep.add(key);
+    let m = chestMeshes.get(key);
+    if (!m) {
+      chestMat ||= [new THREE.MeshLambertMaterial({ map: tex('chest', 1, 1) }), new THREE.MeshLambertMaterial({ color: '#6b3f1d' }), new THREE.MeshLambertMaterial({ color: '#d4a017', emissive: '#6b5200' })];
+      m = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.45, 0.55), chestMat[0]);
+      base.position.y = 0.225;
+      const lidPivot = new THREE.Group();
+      lidPivot.position.set(0, 0.45, -0.275);
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.16, 0.55), chestMat[1]);
+      lid.position.set(0, 0.08, 0.275);
+      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.04), chestMat[2]);
+      lock.position.set(0, 0.0, 0.56);
+      lid.add(lock);
+      lidPivot.add(lid);
+      const spark = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), chestMat[2]);
+      spark.position.y = 1.0;
+      m.add(base, lidPivot, spark);
+      m.userData = { lidPivot, spark };
+      m.position.set(c.p[0], c.p[1], c.p[2]);
+      m.rotation.y = (c.p[0] * 7 + c.p[2] * 3) % (Math.PI * 2);
+      chestGroup.add(m);
+      chestMeshes.set(key, m);
+    }
+    m.userData.open = c.open;
+  }
+  for (const [key, m] of chestMeshes) {
+    if (keep.has(key)) continue;
+    m.removeFromParent();
+    m.traverse((o) => o.geometry?.dispose());
+    chestMeshes.delete(key);
+  }
+}
+function animateChests(dt) {
+  const t = performance.now() / 1000;
+  for (const m of chestMeshes.values()) {
+    const { lidPivot, spark, open } = m.userData;
+    lidPivot.rotation.x += ((open ? -1.9 : 0) - lidPivot.rotation.x) * Math.min(1, dt * 8);
+    spark.visible = !open;
+    spark.position.y = 1.0 + Math.sin(t * 3) * 0.1;
+    spark.rotation.y = t * 2;
+  }
+}
+
+// くちぶえ：かくれている人の頭の上に♪を出して、音をならす
+const whistleUntil = new Map();
+const noteMarks = new Map();
+let audioCtx = null;
+function playWhistle(pos, delay = 0) {
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const ac = audioCtx;
+    const d = camera.position.distanceTo(pos);
+    const vol = Math.min(0.35, 0.6 / (1 + d / 3));
+    // 左右：カメラから見た方向
+    const v = pos.clone().project(camera);
+    const pan = new StereoPannerNode(ac, { pan: Math.max(-1, Math.min(1, v.x)) });
+    const g = ac.createGain();
+    const o = ac.createOscillator();
+    o.type = 'sine';
+    const t0 = ac.currentTime + delay;
+    const melody = [1568, 1976, 2349, 1976, 2637];
+    melody.forEach((f, i) => o.frequency.setValueAtTime(f, t0 + i * 0.18));
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.04);
+    g.gain.setValueAtTime(vol, t0 + melody.length * 0.18 - 0.05);
+    g.gain.linearRampToValueAtTime(0, t0 + melody.length * 0.18);
+    o.connect(g).connect(pan).connect(ac.destination);
+    o.start(t0);
+    o.stop(t0 + melody.length * 0.18 + 0.05);
+  } catch {}
+}
+function playBonk() {
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const ac = audioCtx;
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(220, ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(60, ac.currentTime + 0.25);
+    g.gain.setValueAtTime(0.5, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.3);
+    o.connect(g).connect(ac.destination);
+    o.start();
+    o.stop(ac.currentTime + 0.32);
+  } catch {}
+}
+function noteSprite() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.font = 'bold 52px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#ffd400';
+  g.strokeStyle = '#222';
+  g.lineWidth = 5;
+  g.strokeText('♪', 32, 34);
+  g.fillText('♪', 32, 34);
+  const t = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  sp.scale.set(0.8, 0.8, 1);
+  sp.renderOrder = 12;
+  return sp;
+}
+function animateNotes() {
+  const now = performance.now();
+  const t = now / 1000;
+  for (const [id, until] of whistleUntil) {
+    const c = chars.get(id);
+    let sp = noteMarks.get(id);
+    if (now > until || !c || playerInfo(id)?.found) {
+      whistleUntil.delete(id);
+      if (sp) {
+        sp.removeFromParent();
+        sp.material.map.dispose();
+        sp.material.dispose();
+        noteMarks.delete(id);
+      }
+      continue;
+    }
+    if (!sp) {
+      sp = noteSprite();
+      scene.add(sp);
+      noteMarks.set(id, sp);
+    }
+    const p = c.root.position;
+    sp.position.set(p.x + Math.sin(t * 4) * 0.2, p.y + 2.3 + Math.sin(t * 6) * 0.15, p.z);
+  }
+}
+function onWhistle(m) {
+  const until = performance.now() + (m.ms || 4500);
+  for (const id of m.ids || []) {
+    whistleUntil.set(id, until);
+    const c = chars.get(id);
+    if (!c) continue;
+    const pos = c.root.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+    for (let k = 0; k < 2; k++) playWhistle(pos, k * 1.6 + Math.random() * 0.2);
+  }
+}
+
+// たたかれた
+function onBonk(m) {
+  chars.get(m.from)?.swing();
+  playBonk();
+  if (m.to === myId) {
+    const fl = h('div', { style: 'position:fixed;inset:0;background:rgba(255,0,0,.35);z-index:14;pointer-events:none;transition:opacity .6s' });
+    document.body.append(fl);
+    setTimeout(() => (fl.style.opacity = '0'), 50);
+    setTimeout(() => fl.remove(), 700);
+    toast(m.hp > 0 ? `💫 たたかれた！ のこりたいりょく ${m.hp}` : '😵 やられた…');
+  }
 }
 
 function onKey(e) {
   if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
     toggleDoor();
+    return;
+  }
+  if (e.code === 'KeyG' && !e.ctrlKey && !e.metaKey) {
+    useItem();
     return;
   }
   if (canPaint()) {
@@ -1067,17 +1283,34 @@ function jump() {
 function shoot(cx, cy) {
   const now = performance.now();
   if (now - lastShotAt < 650) return;
+  if (me()?.stun || me()?.down) return;
   lastShotAt = now;
-  raycaster.setFromCamera(new THREE.Vector2((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1), camera);
   const targets = [...world.meshes];
   for (const [id, c] of chars) {
     if (id === myId || c.kind !== 'hider' || playerInfo(id)?.found) continue;
     if (playerInfo(id)?.role !== 'hider') continue;
     targets.push(...c.parts);
   }
-  const hit = raycaster.intersectObjects(targets, false)[0];
+  const shotgun = itemsOn() && me()?.item?.k === 'shotgun';
+  const nx = (cx / innerWidth) * 2 - 1;
+  const ny = -(cy / innerHeight) * 2 + 1;
+  // ショットガンは、まわりにちらばる 9 はつのうち、どれかが当たればよい
+  const offs = shotgun ? [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]] : [[0, 0]];
+  const spread = 0.09;
+  let hit = null;
+  let first = null;
+  for (const [ox, oy] of offs) {
+    raycaster.setFromCamera(new THREE.Vector2(nx + ox * spread, ny + oy * spread * (innerWidth / innerHeight)), camera);
+    const hh = raycaster.intersectObjects(targets, false)[0];
+    if (!first) first = hh;
+    if (hh?.object.userData.owner) {
+      hit = hh;
+      break;
+    }
+  }
+  hit ||= first;
   const point = hit ? hit.point.toArray().map((v) => +v.toFixed(3)) : null;
-  send({ t: 'shoot', target: hit?.object.userData.owner ?? null, point });
+  send({ t: 'shoot', target: hit?.object.userData.owner ?? null, point, shotgun: shotgun || undefined });
   $('crosshair').classList.add('cool');
   setTimeout(() => $('crosshair').classList.remove('cool'), 650);
 }
@@ -1135,6 +1368,8 @@ function step() {
   }
 
   for (const c of chars.values()) c.update(dt);
+  animateChests(dt);
+  animateNotes();
   if (viewMode === 'hider') keepBodyOutOfObjects();
   updateVisibility();
   updateCamo();
@@ -1275,8 +1510,9 @@ function updateOrbitCamera() {
 
 // うちゅうでは、おにも重力なしでどこへでもとべる
 function updateSeekerSpace(dt) {
-  const { f, s } = moveInput();
-  let v = vertInput();
+  const stunned = !!(me()?.stun || me()?.down);
+  const { f, s } = stunned ? { f: 0, s: 0 } : moveInput();
+  let v = stunned ? 0 : vertInput();
   if (keys.has('Space')) v += 1;
   const [yaw, pitch] = self.look;
   const fw = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
@@ -1297,7 +1533,8 @@ function updateSeekerSpace(dt) {
 
 function updateSeeker(dt) {
   if (MAPS[world.id]?.zeroG) return updateSeekerSpace(dt);
-  const { f, s } = moveInput();
+  const stunned = !!(me()?.stun || me()?.down);
+  const { f, s } = stunned ? { f: 0, s: 0 } : moveInput();
   const yaw = self.look[0];
   const fw = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
   const rt = new THREE.Vector3(-fw.z, 0, fw.x);
@@ -1379,6 +1616,7 @@ const brains = createCpuBrains({
   getState: () => S,
   getWorld: () => world,
   myId: () => myId,
+  whistling: () => [...whistleUntil.keys()],
   // 見つけ判定の描画中は、鬼と名札を隠して対象だけを出し入れする
   setProbe(targetId, show) {
     for (const [id, c] of chars) {
@@ -1399,6 +1637,7 @@ function updateVisibility() {
   for (const [id, c] of chars) {
     c.setSuit(suit);
     const info = playerInfo(id);
+    c.setHeld(itemsOn() && info && !info.found && !info.down ? info.item?.k : null);
     let vis = false;
     let label = false;
     let outline = null;
@@ -1461,8 +1700,18 @@ function renderHud() {
     ? (people.length > 1 ? `じゅんびタイム（OK ${readyN}/${people.length}にん）` : 'じゅんびタイム')
     : `さがしちゅう・のこり${left}にん`;
   const rl = $('roleLabel');
+  // アイテムモード：おにのたいりょくと、じぶんのアイテム
+  const il = $('itemLabel');
+  if (itemsOn() && S.phase === 'hunt') {
+    const hearts = S.players.filter((p) => p.role === 'seeker').map((p) => (p.down ? '😵' : '❤️'.repeat(p.hp ?? 2) + '🖤'.repeat(Math.max(0, 2 - (p.hp ?? 2))))).join(' ');
+    const it = info?.item;
+    il.textContent = `👹${hearts}` + (it ? `　${ITEM_ICON[it.k]}${ITEM_LABEL[it.k]}${it.k === 'whistle' ? '' : '×' + it.n}` : '');
+    il.classList.remove('hidden');
+  } else {
+    il.classList.add('hidden');
+  }
   if (info?.role === 'seeker') {
-    rl.textContent = '👹 おに';
+    rl.textContent = info.down ? '😵 やられた' : info.stun ? '💫 ふらふら' : '👹 おに';
     rl.className = 'seeker';
   } else if (info?.role === 'hider') {
     rl.textContent = info.found ? '😵 みつかった' : '🦎 かくれるがわ';
@@ -1494,6 +1743,7 @@ function renderHint() {
     html = 'かんせんちゅう　WASD：いどう　Q/E：うえ・した　ドラッグ：してん';
   }
   if (html && MAPS[world.id]?.doors && (viewMode === 'hider' || viewMode === 'fps')) html += '<br><b>F：ちかくのとびらを開ける・しめる</b>';
+  if (html && itemsOn() && (viewMode === 'hider' || viewMode === 'fps')) html += '<br><b>F：たからばこをあける　G：アイテムをつかう</b>';
   el.innerHTML = html;
   el.classList.toggle('hidden', !html);
 }
@@ -1517,8 +1767,17 @@ function renderTouch() {
   };
   if (viewMode === 'fps' && !MAPS[world.id]?.zeroG) btns.append(hold('jump', '⤒'));
   else btns.append(hold('up', '⬆'), hold('down', '⬇'));
-  if (MAPS[world.id]?.doors && (viewMode === 'hider' || viewMode === 'fps')) {
-    const b = h('button', {}, '🚪');
+  const it = itemsOn() && me()?.item;
+  if (it && it.k !== 'shotgun' && (viewMode === 'hider' || viewMode === 'fps')) {
+    const ib = h('button', {}, ITEM_ICON[it.k]);
+    ib.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      useItem();
+    });
+    btns.append(ib);
+  }
+  if ((MAPS[world.id]?.doors || itemsOn()) && (viewMode === 'hider' || viewMode === 'fps')) {
+    const b = h('button', {}, MAPS[world.id]?.doors ? '🚪' : '🎁');
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       toggleDoor();
@@ -1704,6 +1963,7 @@ function settingsCard() {
       h('label', {}, 'CPU'), sel('cpus', [0, 1, 2, 3, 4, 5, 6, 7], (o) => (o ? `${o}にん` : 'なし')),
       st.cpus > 0 && h('label', {}, 'CPUのつよさ'), st.cpus > 0 && sel('cpuLevel', ['easy', 'normal', 'hard'], (o) => ({ easy: 'よわい', normal: 'ふつう', hard: 'つよい' })[o]),
       h('label', {}, 'モード'), sel('mode', ['normal', 'infect'], (o) => (o === 'normal' ? 'ノーマル' : 'ふえおに（みつかるとおにになる）')),
+      h('label', {}, 'アイテム'), sel('items', [0, 1], (o) => (o ? 'あり（たからばこ）' : 'なし')),
       h('label', {}, 'おにのにんずう'), sel('seekers', [1, 2, 3, 4], (o) => `${o}にん`),
       h('label', {}, 'じゅんびタイム'), sel('prepSec', [30, 60, 90, 120, 150, 180, 240, 300], (o) => `${o}びょう`),
       h('label', {}, 'さがすタイム'), sel('huntSec', [30, 60, 90, 120, 150, 180, 240], (o) => `${o}びょう`),

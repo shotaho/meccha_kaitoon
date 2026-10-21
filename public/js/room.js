@@ -23,7 +23,16 @@ const LIMITS = {
   penaltySec: [0, 30],
   seekers: [1, 8],
   cpus: [0, MAX_CPUS],
+  items: [0, 1],
 };
+
+// アイテムモード
+const CHEST_COUNT = 6;
+const SEEKER_HP = 2;
+const BAT_RANGE = 2.3;
+const STUN_MS = 2000;
+const WHISTLE_MS = 4500;
+const ITEM_NAMES = { shotgun: '🔫ショットガン', whistle: '📣くちぶえブザー', bat: '🏏バット' };
 
 const POSES = new Set(['stand', 'crouch', 'curl', 'lie', 'banzai', 'star', 'flip']);
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -112,7 +121,9 @@ export function createRoom({ getUrls = () => [] } = {}) {
     map: 'house',
     cpus: 0,
     cpuLevel: 'normal',
+    items: 0, // 1：アイテムモード（たからばこにアイテム）
   };
+  let chests = []; // { id, p:[x,y,z], open }
 
   function send(p, msg) {
     p.conn?.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -187,6 +198,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
       role: p.role,
       found: p.found,
       foundBy: p.foundBy,
+      item: p.item ? { k: p.item.k, n: p.item.n } : null,
+      hp: p.hp,
+      down: !!p.down,
+      stun: (p.stunUntil || 0) > Date.now(),
     };
   }
 
@@ -203,6 +218,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
       foundLog,
       result: roundResult,
       doors,
+      chests: settings.items ? chests : [],
       urls: getUrls(),
     };
   }
@@ -221,6 +237,19 @@ export function createRoom({ getUrls = () => [] } = {}) {
   }
 
   // ----- ラウンド進行 -----
+
+  // たからばこを、ステージのあるける場所からランダムにえらんでおく
+  function placeChests() {
+    const m = MAPS[settings.map];
+    const s0 = m.seekerSpawn;
+    const pts = (m.nav || [])
+      .filter((n) => Math.hypot(n[0] - s0[0], n[2] - s0[2]) > 4)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, CHEST_COUNT);
+    return pts.map((n, i) => ({ id: 'c' + i, p: [n[0] + (Math.random() - 0.5), n[1] ?? 0, n[2] + (Math.random() - 0.5)], open: false }));
+  }
+
+  const busy = (p) => p.down || (p.stunUntil || 0) > Date.now();
 
   // role: 人間が1人（CPU 戦）のとき、その人が選んだ役 'seeker' | 'hider'
   function startRound(role) {
@@ -252,6 +281,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
 
     roundNo++;
     doors = {};
+    chests = settings.items ? placeChests() : [];
     foundLog = [];
     roundResult = null;
     let hi = 0;
@@ -262,6 +292,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
     for (const p of players.values()) {
       p.found = false;
       p.foundBy = null;
+      p.item = null;
+      p.hp = SEEKER_HP;
+      p.down = false;
+      p.stunUntil = 0;
       p.ops = [];
       p.lastShot = 0;
       p.spot = null;
@@ -311,7 +345,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
     broadcastState();
   }
 
-  function endRound(reason) {
+  function endRound(reason, winner) {
     phase = 'result';
     phaseEndsAt = 0;
     const survivors = [...players.values()].filter((p) => p.role === 'hider' && !p.found);
@@ -319,7 +353,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
     roundResult = {
       reason,
       survivors: survivors.map((p) => p.id),
-      winner: survivors.length ? 'hiders' : 'seekers',
+      winner: winner || (survivors.length ? 'hiders' : 'seekers'),
     };
     broadcastState();
   }
@@ -370,7 +404,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
         if (p.role !== 'hider' && p.role !== 'seeker') return;
         if (validVec(msg.look, 2)) p.tf.look = msg.look;
         // かくれる側は、見つかるまではさがす時間も動ける
-        const canMove = (p.role === 'hider' && !p.found && (phase === 'prep' || phase === 'hunt')) || (p.role === 'seeker' && phase === 'hunt');
+        const canMove = (p.role === 'hider' && !p.found && (phase === 'prep' || phase === 'hunt')) || (p.role === 'seeker' && phase === 'hunt' && !busy(p));
         if (!canMove) return;
         const b = MAPS[settings.map].bounds;
         if (validVec(msg.p, 3)) p.tf.p = [clamp(msg.p[0], b.x0, b.x1), clamp(msg.p[1], -1, b.h), clamp(msg.p[2], b.z0, b.z1)];
@@ -390,6 +424,71 @@ export function createRoom({ getUrls = () => [] } = {}) {
         p.ops.push(...ops);
         // n：ここまでの数。受け取った側は数が合わなければ全部を取りなおす
         broadcast({ t: 'paint', id: p.id, ops, n: p.ops.length }, p.id);
+        return;
+      }
+      case 'open': {
+        // たからばこをあける
+        if (!settings.items || phase !== 'hunt') return;
+        const c = chests.find((x) => x.id === msg.id);
+        if (!c || c.open) return;
+        const okRole = (p.role === 'seeker' && !busy(p)) || (p.role === 'hider' && !p.found);
+        if (!okRole) return;
+        if (Math.hypot(p.tf.p[0] - c.p[0], p.tf.p[2] - c.p[2]) > 2.4 || Math.abs(p.tf.p[1] - c.p[1]) > 2) return;
+        if (p.item) return send(p, { t: 'toast', text: 'もうアイテムをもっているよ。つかってからあけてね' });
+        c.open = true;
+        if (p.role === 'seeker') p.item = Math.random() < 0.5 ? { k: 'shotgun', n: 3 } : { k: 'whistle', n: 1 };
+        else p.item = { k: 'bat', n: 3 };
+        broadcast({ t: 'chest', id: c.id, by: p.id, item: p.item.k });
+        systemMsg(`${p.name} が たからばこから ${ITEM_NAMES[p.item.k]} をみつけた！`);
+        broadcastState();
+        return;
+      }
+      case 'use': {
+        // アイテムをつかう（くちぶえブザー・バット。ショットガンは撃つときにつかう）
+        if (!settings.items || phase !== 'hunt' || !p.item) return;
+        const now = Date.now();
+        if (p.item.k === 'whistle' && p.role === 'seeker' && !busy(p)) {
+          p.item = null;
+          const ids = [...players.values()].filter((q) => q.role === 'hider' && !q.found).map((q) => q.id);
+          broadcast({ t: 'whistle', ids, ms: WHISTLE_MS });
+          systemMsg(`📣 ${p.name} のブザー！ かくれているみんなが くちぶえをふいた！`);
+          broadcastState();
+          return;
+        }
+        if (p.item.k === 'bat' && p.role === 'hider' && !p.found) {
+          if (now - (p.lastSwing || 0) < 900) return;
+          p.lastSwing = now;
+          if (--p.item.n <= 0) p.item = null;
+          // いちばん近いおにをたたく
+          let best = null;
+          for (const q of players.values()) {
+            if (q.role !== 'seeker' || q.down) continue;
+            const d = Math.hypot(q.tf.p[0] - p.tf.p[0], q.tf.p[2] - p.tf.p[2]);
+            if (d < BAT_RANGE && Math.abs(q.tf.p[1] - p.tf.p[1]) < 2 && (!best || d < best.d)) best = { q, d };
+          }
+          if (!best) {
+            broadcast({ t: 'swing', from: p.id });
+            broadcastState();
+            return;
+          }
+          const q = best.q;
+          q.hp = Math.max(0, (q.hp ?? SEEKER_HP) - 1);
+          q.stunUntil = now + STUN_MS;
+          broadcast({ t: 'bonk', from: p.id, to: q.id, hp: q.hp });
+          if (q.hp <= 0) {
+            q.down = true;
+            p.score += 2;
+            systemMsg(`🏏 ${p.name} が ${q.name} をやっつけた！`);
+          } else {
+            systemMsg(`🏏 ${p.name} が ${q.name} をたたいた！（のこり たいりょく ${q.hp}）`);
+          }
+          broadcastState();
+          timers.push(setTimeout(broadcastState, STUN_MS + 100));
+          if ([...players.values()].filter((x) => x.role === 'seeker').every((x) => x.down)) {
+            endRound('バットでおにをやっつけた！', 'hiders');
+          }
+          return;
+        }
         return;
       }
       case 'ping':
@@ -418,10 +517,17 @@ export function createRoom({ getUrls = () => [] } = {}) {
         return;
       }
       case 'shoot': {
-        if (p.role !== 'seeker' || phase !== 'hunt') return;
+        if (p.role !== 'seeker' || phase !== 'hunt' || busy(p)) return;
         const now = Date.now();
         if (now - p.lastShot < SHOT_COOLDOWN_MS) return;
         p.lastShot = now;
+        // ショットガン：たまを1つつかう
+        if (msg.shotgun && p.item?.k === 'shotgun') {
+          if (--p.item.n <= 0) p.item = null;
+          broadcastState();
+        } else if (msg.shotgun) {
+          return;
+        }
         const point = validVec(msg.point, 3) ? msg.point : null;
         const target = players.get(msg.target);
         if (target && target.role === 'hider' && !target.found) {
@@ -533,7 +639,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
         // CPU 鬼の動きはホストのブラウザが計算して送ってくる
         if (!isHost || !msg.msg || typeof msg.msg !== 'object') return;
         const c = players.get(msg.id);
-        if (!c || !c.cpu || !['tf', 'shoot', 'door'].includes(msg.msg.t)) return;
+        if (!c || !c.cpu || !['tf', 'shoot', 'door', 'open', 'use'].includes(msg.msg.t)) return;
         handle(c, msg.msg);
         return;
       }

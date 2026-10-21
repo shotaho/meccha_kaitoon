@@ -235,6 +235,53 @@ export class Character {
     this.root.add(this.label);
   }
 
+  // 手にもつアイテム（'bat' | 'shotgun' | null）
+  setHeld(kind) {
+    kind = kind === 'bat' || kind === 'shotgun' ? kind : null;
+    if (kind === (this.heldKind || null)) return;
+    if (this.held) {
+      this.held.removeFromParent();
+      this.held.traverse((o) => {
+        o.geometry?.dispose();
+        o.material?.dispose();
+      });
+      this.held = null;
+    }
+    this.heldKind = kind;
+    if (!kind) return;
+    const g = new THREE.Group();
+    if (kind === 'bat') {
+      const wood = new THREE.MeshLambertMaterial({ color: '#c89a5b' });
+      const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.022, 0.75, 10), wood);
+      bat.position.y = -0.35;
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.14, 8), new THREE.MeshLambertMaterial({ color: '#333333' }));
+      grip.position.y = 0.05;
+      g.add(bat, grip);
+      g.rotation.x = -1.2;
+    } else {
+      const dark = new THREE.MeshLambertMaterial({ color: '#2b2b2b' });
+      const wood = new THREE.MeshLambertMaterial({ color: '#7a4b26' });
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.6, 10), dark);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.z = 0.3;
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.3), wood);
+      stock.position.set(0, -0.04, -0.08);
+      g.add(barrel, stock);
+      g.rotation.x = 1.4;
+    }
+    g.position.y = -0.55;
+    g.traverse((o) => {
+      if (o.isMesh) o.raycast = () => {};
+    });
+    this.armR.add(g);
+    this.held = g;
+  }
+
+  // バットをふる
+  swing() {
+    this.swingT = 0.35;
+  }
+
   // うちゅうふく（おにだけ）。ヘルメット・せなかのタンク・白いスーツ
   setSuit(on) {
     on = !!on && this.kind === 'seeker';
@@ -326,6 +373,12 @@ export class Character {
       n[key][1] += (goal[key][1] - n[key][1]) * k;
     }
     this.applyPose();
+    if (this.swingT > 0) {
+      this.swingT -= dt;
+      const t = 1 - Math.max(0, this.swingT) / 0.35;
+      this.armR.rotation.x -= Math.sin(t * Math.PI) * 2.2;
+      this.armR.rotation.z -= Math.sin(t * Math.PI) * 0.8;
+    }
 
     if (this.dirty.size) {
       for (const i of this.dirty) this.paint[i].tex.needsUpdate = true;
