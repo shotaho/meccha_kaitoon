@@ -308,7 +308,7 @@ function onMessage(m) {
       syncCharKinds();
       renderPanel();
       renderHud();
-      if (viewMode === 'hider' && S.phase === 'prep') renderTools(); // 「かくれたよ」の表示を更新
+      if (viewMode === 'hider' && (S.phase === 'prep' || prevPhase !== S.phase)) renderTools(); // 「かくれたよ」の表示を更新
       break;
     }
     case 'round':
@@ -452,7 +452,8 @@ function computeViewMode() {
       return 'free';
     case 'hunt':
       if (role === 'seeker') return 'fps';
-      if (role === 'hider' && !info.found) return 'frozen';
+      // 見つかるまでは、さがされている間も動ける
+      if (role === 'hider' && !info.found) return 'hider';
       return 'free';
     case 'result':
       return 'free';
@@ -1557,7 +1558,7 @@ function renderTools() {
       h('button', { class: sel(hiderMode === 'paint'), onclick: () => pickMode('paint') }, '🎨 ペイント'),
     ),
   );
-  if (!frozen) {
+  if (!frozen && S?.phase === 'prep') {
     // かくれ終わったら押す
     const ready = !!me()?.ready;
     parts.push(h('button', {
@@ -1585,7 +1586,9 @@ function renderTools() {
           h('button', { class: 'sub', onclick: () => roll(1) }, 'よこにたおす'),
         ),
       ),
-      h('p', { class: 'muted' }, 'ばしょとポーズをきめたら、ペイントではいけいにとけこもう！ くうちゅうにもうけます（Q/E・⬆⬇）'),
+      h('p', { class: 'muted' }, S?.phase === 'hunt'
+        ? 'おにがさがしているよ！ みつかるまでは、うごいてにげたり、ばしょをかえたりできるよ（うごくとめだつので気をつけて）'
+        : 'ばしょとポーズをきめたら、ペイントではいけいにとけこもう！ くうちゅうにもうけます（Q/E・⬆⬇）'),
     );
   } else {
     const tools = [['brush', '🖌 ブラシ'], ['eraser', '🧽 けしゴム'], ['picker', '💧 スポイト'], ['fill', '🪣 パーツぬり'], ['rotate', '🔄 してん']];

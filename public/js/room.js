@@ -369,7 +369,8 @@ export function createRoom({ getUrls = () => [] } = {}) {
       case 'tf': {
         if (p.role !== 'hider' && p.role !== 'seeker') return;
         if (validVec(msg.look, 2)) p.tf.look = msg.look;
-        const canMove = (p.role === 'hider' && phase === 'prep') || (p.role === 'seeker' && phase === 'hunt');
+        // かくれる側は、見つかるまではさがす時間も動ける
+        const canMove = (p.role === 'hider' && !p.found && (phase === 'prep' || phase === 'hunt')) || (p.role === 'seeker' && phase === 'hunt');
         if (!canMove) return;
         const b = MAPS[settings.map].bounds;
         if (validVec(msg.p, 3)) p.tf.p = [clamp(msg.p[0], b.x0, b.x1), clamp(msg.p[1], -1, b.h), clamp(msg.p[2], b.z0, b.z1)];
@@ -518,10 +519,10 @@ export function createRoom({ getUrls = () => [] } = {}) {
         return;
       }
       case 'door': {
-        // とびらの開け閉め：準備中はかくれる側、さがす時間はおに。近くにいるときだけ
+        // とびらの開け閉め：かくれる側（見つかるまで）とおに。近くにいるときだけ
         const d = (MAPS[settings.map].doors || []).find((x) => x.id === msg.id);
         if (!d || !p.tf) return;
-        const ok = (phase === 'prep' && p.role === 'hider') || (phase === 'hunt' && p.role === 'seeker');
+        const ok = (p.role === 'hider' && !p.found && (phase === 'prep' || phase === 'hunt')) || (phase === 'hunt' && p.role === 'seeker');
         if (!ok) return;
         if (Math.hypot(p.tf.p[0] - d.c[0], p.tf.p[2] - d.c[1]) > 3) return;
         doors[d.id] = !doors[d.id];
