@@ -235,3 +235,11 @@ details summary { cursor: pointer; font-weight: 800; }
 #ping.mid { color: #ffd43b; }
 #ping.bad { color: #ff8787; }
 @media (max-width: 700px) { #ping { top: 6px; bottom: auto; right: 6px; } }
+
+/* たからばこの近くで出すお知らせ */
+#prompt {
+  position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 6; pointer-events: none;
+  background: rgba(0, 0, 0, .7); color: #ffd43b; padding: 8px 16px; border-radius: 99px;
+  font-size: 15px; font-weight: 800; white-space: nowrap;
+}
+@media (max-width: 700px) { #prompt { bottom: auto; top: 96px; font-size: 13px; } }

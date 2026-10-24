@@ -589,10 +589,15 @@ function nearDoor() {
 function toggleDoor() {
   // たからばこがちかくにあれば、そちらをあける
   const c = nearChest();
-  if (c) return send({ t: 'open', id: c.id });
+  if (c) {
+    if (me()?.item) return toast('もうアイテムをもっているよ。つかってからあけてね');
+    if (S.phase === 'prep' && me()?.role !== 'hider') return toast('おには、さがす時間になったらあけられるよ');
+    return send({ t: 'open', id: c.id });
+  }
   const d = nearDoor();
-  if (d) send({ t: 'door', id: d.id });
-  else if (MAPS[world.id]?.doors) toast('とびらのちかくでおしてね');
+  if (d) return send({ t: 'door', id: d.id });
+  if (nearChest(5)) return toast('もうすこしちかづいてね');
+  if (MAPS[world.id]?.doors) toast('とびらのちかくでおしてね');
   else if (itemsOn()) toast('たからばこのちかくでおしてね');
 }
 
@@ -604,15 +609,29 @@ const itemsOn = () => !!S?.settings?.items;
 const ITEM_ICON = { shotgun: '🔫', whistle: '📣', bat: '🏏' };
 const ITEM_LABEL = { shotgun: 'ショットガン', whistle: 'くちぶえブザー', bat: 'バット' };
 
-function nearChest() {
-  if (!itemsOn() || S.phase !== 'hunt' || (viewMode !== 'hider' && viewMode !== 'fps')) return null;
+// いちばん近い、まだあいていないたからばこ（range m 以内）
+function nearChest(range = 2.5) {
+  if (!itemsOn() || !S || (S.phase !== 'prep' && S.phase !== 'hunt') || (viewMode !== 'hider' && viewMode !== 'fps')) return null;
   let best = null;
   for (const c of S.chests || []) {
     if (c.open) continue;
     const d = Math.hypot(self.pos.x - c.p[0], self.pos.z - c.p[2]);
-    if (d < 2.0 && Math.abs(self.pos.y - c.p[1]) < 2 && (!best || d < best.d)) best = { id: c.id, d };
+    if (d < range && Math.abs(self.pos.y - c.p[1]) < 2.5 && (!best || d < best.d)) best = { id: c.id, d };
   }
   return best;
+}
+
+// たからばこの近くにいるときは「あけられるよ」と出す
+let promptT = 0;
+function updateChestPrompt(dt) {
+  promptT -= dt;
+  if (promptT > 0) return;
+  promptT = 0.2;
+  const el = $('prompt');
+  const c = nearChest();
+  if (!c) return el.classList.add('hidden');
+  el.textContent = me()?.item ? '🎁 たからばこ（アイテムをつかってからあけられるよ）' : isTouch ? '🎁 🎁ボタンでたからばこをあける' : '🎁 F キーでたからばこをあける';
+  el.classList.remove('hidden');
 }
 
 function useItem() {
@@ -1370,6 +1389,7 @@ function step() {
   for (const c of chars.values()) c.update(dt);
   animateChests(dt);
   animateNotes();
+  updateChestPrompt(dt);
   if (viewMode === 'hider') keepBodyOutOfObjects();
   updateVisibility();
   updateCamo();

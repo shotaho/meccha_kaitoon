@@ -427,13 +427,15 @@ export function createRoom({ getUrls = () => [] } = {}) {
         return;
       }
       case 'open': {
-        // たからばこをあける
-        if (!settings.items || phase !== 'hunt') return;
+        // たからばこをあける（かくれる側はじゅんび中も、おにはさがす時間に）
+        if (!settings.items) return;
         const c = chests.find((x) => x.id === msg.id);
-        if (!c || c.open) return;
-        const okRole = (p.role === 'seeker' && !busy(p)) || (p.role === 'hider' && !p.found);
-        if (!okRole) return;
-        if (Math.hypot(p.tf.p[0] - c.p[0], p.tf.p[2] - c.p[2]) > 2.4 || Math.abs(p.tf.p[1] - c.p[1]) > 2) return;
+        if (!c) return;
+        if (c.open) return send(p, { t: 'toast', text: 'このたからばこは、もうからっぽ' });
+        const okRole = (p.role === 'seeker' && phase === 'hunt' && !busy(p)) || (p.role === 'hider' && !p.found && (phase === 'prep' || phase === 'hunt'));
+        if (!okRole) return send(p, { t: 'toast', text: 'いまはあけられないよ' });
+        // 少しおくれて位置がとどくこともあるので、ゆとりをもたせる
+        if (Math.hypot(p.tf.p[0] - c.p[0], p.tf.p[2] - c.p[2]) > 3.2 || Math.abs(p.tf.p[1] - c.p[1]) > 2.5) return send(p, { t: 'toast', text: 'もうすこしちかづいてね' });
         if (p.item) return send(p, { t: 'toast', text: 'もうアイテムをもっているよ。つかってからあけてね' });
         c.open = true;
         if (p.role === 'seeker') p.item = Math.random() < 0.5 ? { k: 'shotgun', n: 3 } : { k: 'whistle', n: 1 };
