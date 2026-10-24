@@ -48,6 +48,33 @@ function toast(text) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
+// ----- バージョン（公開するときに日時が入る）と、あたらしい版のおしらせ -----
+const BUILD_RAW = document.querySelector('meta[name="build"]')?.content || '';
+const BUILD = BUILD_RAW.startsWith('__') ? 'dev' : BUILD_RAW;
+let updateShown = false;
+async function checkUpdate() {
+  if (BUILD === 'dev' || updateShown) return;
+  try {
+    const r = await fetch(`${location.pathname}?nocache=${Date.now()}`, { cache: 'no-store' });
+    const html = await r.text();
+    const latest = html.match(/<meta name="build" content="([^"]+)"/)?.[1];
+    if (!latest || latest === BUILD || latest.startsWith('__')) return;
+    updateShown = true;
+    const bar = document.createElement('button');
+    bar.textContent = '🔄 あたらしいバージョンがあります。タップでこうしん';
+    bar.style.cssText = 'position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:30;font-size:14px;padding:10px 16px;border-radius:99px;background:#ffd43b;color:#222;box-shadow:0 2px 8px rgba(0,0,0,.4)';
+    bar.onclick = () => {
+      const q = new URLSearchParams(location.search);
+      q.set('v', latest);
+      location.replace(`${location.pathname}?${q}`);
+    };
+    document.body.append(bar);
+  } catch {}
+}
+checkUpdate();
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && checkUpdate());
+setInterval(checkUpdate, 5 * 60 * 1000);
+
 function feed(text) {
   const el = h('div', {}, text);
   $('feed').append(el);
@@ -2062,6 +2089,7 @@ function joinCards() {
     h('div', { class: 'logo' }, '🦎'),
     h('h1', {}, 'めっちゃカイトオン'),
     h('p', { class: 'muted' }, 'からだにえをかいてはいけいにとけこむ、おえかきかくれんぼ。PC・スマホのブラウザでたいせん！'),
+    h('p', { class: 'muted', style: 'font-size:11px;margin-top:8px' }, `バージョン ${BUILD}`),
   );
   const cpuCard = h('div', { class: 'card' },
     h('button', { style: 'width:100%;font-size:18px;padding:14px', onclick: () => takeName() && connect('cpu') }, '🤖 CPUとすぐあそぶ'),

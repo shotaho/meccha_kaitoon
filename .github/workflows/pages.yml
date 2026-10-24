@@ -23,6 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # スマホなどが古いファイルを使いつづけないように、公開のたびに ?v=番号 をつける
+      - name: Add build version (cache busting)
+        run: |
+          V="$(TZ=Asia/Tokyo date +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
+          sed -i -E "s#(from '\./[A-Za-z0-9_-]+\.js)'#\1?v=${V}'#g" public/js/*.js
+          sed -i -E "s#src=\"js/main\.js\"#src=\"js/main.js?v=${V}\"#; s#href=\"style\.css\"#href=\"style.css?v=${V}\"#; s#__BUILD__#${V}#g" public/index.html
+          grep -n "main.js\|build" public/index.html
+          grep -c "?v=${V}" public/js/*.js || true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
