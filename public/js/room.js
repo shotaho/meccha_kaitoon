@@ -252,7 +252,8 @@ export function createRoom({ getUrls = () => [] } = {}) {
   const busy = (p) => p.down || (p.stunUntil || 0) > Date.now();
 
   // role: 人間が1人（CPU 戦）のとき、その人が選んだ役 'seeker' | 'hider'
-  function startRound(role) {
+  // pick: ホストがえらんだ、おにになる人の id のリスト（あれば role より優先）
+  function startRound(role, pick) {
     // 1人だけなら CPU と対戦する
     if (online().length < MIN_PLAYERS && !settings.cpus) {
       settings.cpus = 3;
@@ -269,7 +270,11 @@ export function createRoom({ getUrls = () => [] } = {}) {
       .map((x) => x.p);
     let seekers;
     const host = players.get(hostId);
-    if ((role === 'seeker' || role === 'hider') && host && list.includes(host)) {
+    const picked = Array.isArray(pick) ? list.filter((p) => pick.includes(p.id)) : [];
+    if (picked.length) {
+      // ホストがえらんだ人をおにに（全員おにはできないので、1人はかくれる側にのこす）
+      seekers = new Set(picked.slice(0, list.length - 1).map((p) => p.id));
+    } else if ((role === 'seeker' || role === 'hider') && host && list.includes(host)) {
       // ホストがえらんだ役にする。ほかの人（CPU を含む）はランダム
       const others = byTurn(list.filter((p) => p !== host));
       seekers = role === 'seeker'
@@ -577,7 +582,7 @@ export function createRoom({ getUrls = () => [] } = {}) {
         if (!isHost) return send(p, { t: 'toast', text: 'ホストだけがスタートできます' });
         if (phase !== 'lobby' && phase !== 'result') return;
         try {
-          startRound(msg.role);
+          startRound(msg.role, msg.seekers);
         } catch (e) {
           send(p, { t: 'toast', text: e.message });
         }

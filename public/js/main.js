@@ -1975,6 +1975,32 @@ function isCpuMatch() {
 }
 
 // ホストは自分の役（おに／かくれる）をえらんでスタートする
+// ホストがえらんだ「おにになる人」
+const pickedSeekers = new Set();
+function seekerPicker() {
+  const people = S.players.filter((p) => p.online && p.role !== 'spectator');
+  for (const id of [...pickedSeekers]) if (!people.some((p) => p.id === id)) pickedSeekers.delete(id);
+  const n = pickedSeekers.size;
+  return h('div', { style: 'margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)' },
+    h('h4', { style: 'margin:0 0 6px' }, '👹 おにをえらぶ'),
+    h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' }, people.map((p) => h('button', {
+      class: pickedSeekers.has(p.id) ? 'danger small' : 'sub small',
+      onclick: () => {
+        if (pickedSeekers.has(p.id)) pickedSeekers.delete(p.id);
+        else pickedSeekers.add(p.id);
+        renderPanel();
+      },
+    }, (pickedSeekers.has(p.id) ? '👹 ' : '') + (p.cpu ? '🤖' : '') + p.name + (p.id === myId ? '（あなた）' : '')))),
+    h('button', {
+      class: 'danger',
+      style: 'width:100%;margin-top:8px',
+      disabled: !n || n >= people.length,
+      onclick: () => send({ t: 'start', seekers: [...pickedSeekers] }),
+    }, n ? `えらんだ ${n}にん をおににしてスタート` : 'おにをえらんでね'),
+    n && n >= people.length ? h('p', { class: 'muted' }, 'ぜんいんはおにになれないよ（かくれる人を1人いじょうのこしてね）') : null,
+  );
+}
+
 function roleChoiceCard() {
   if (!isHost()) return null;
   const cpuMatch = isCpuMatch();
@@ -1989,6 +2015,7 @@ function roleChoiceCard() {
     h('p', { class: 'muted' }, cpuMatch
       ? (S.settings.cpus ? `CPU ${S.settings.cpus}にんとたいせん（したのせっていでかえられます）` : 'CPU 3にんとたいせんします')
       : 'あなた（ホスト）の役をえらんでスタート。ほかの人の役はランダムできまります'),
+    seekerPicker(),
   );
 }
 
