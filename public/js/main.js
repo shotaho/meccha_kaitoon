@@ -247,9 +247,29 @@ function shareUrl(code) {
 }
 
 // 接続を始める。mode = 'cpu'（CPU とすぐ遊ぶ）／ p2p では 'host' | 'join'
+// おぼえておいたルールせってい（むかしの CPU 戦のせっていも読む）
+const SETTING_KEYS = ['map', 'cpus', 'cpuLevel', 'mode', 'items', 'seekers', 'prepSec', 'huntSec', 'penaltySec'];
+let restorePending = false;
+let wasLastOne = false;
+function loadSettings(key) {
+  let saved = {};
+  try {
+    saved = JSON.parse(store.get(key) || '{}') || {};
+  } catch {}
+  if (key === 'settings.cpu' && !store.get(key)) {
+    if (store.get('cpu.map')) saved.map = store.get('cpu.map');
+    if (store.get('cpu.level')) saved.cpuLevel = store.get('cpu.level');
+    if (store.get('cpu.cpus')) saved.cpus = Number(store.get('cpu.cpus'));
+  }
+  const out = {};
+  for (const k of SETTING_KEYS) if (saved[k] != null) out[k] = saved[k];
+  return out;
+}
+
 function connect(mode, code, fresh = false) {
   link?.close();
   offline = mode === 'cpu';
+  restorePending = mode === 'cpu' || mode === 'host';
   if (offline) {
     hosting = true;
     roomCode = null;
@@ -321,19 +341,29 @@ function onMessage(m) {
       ensureWorld(S.settings.map);
       world.setDoors(S.doors);
       syncChests();
-      if (offline) {
-        // CPU 戦の設定は次回のために覚えておく
-        store.set('cpu.cpus', String(S.settings.cpus || 3));
-        store.set('cpu.level', S.settings.cpuLevel);
-        store.set('cpu.map', S.settings.map);
-        if (quickStart && S.phase === 'lobby') {
+      // ルールせっていは、次に開いたとき（再読みこみ・部屋の作りなおし）のためにおぼえておく
+      if (hosting && netMode !== 'server') {
+        const key = offline ? 'settings.cpu' : 'settings.room';
+        if (restorePending && S.phase === 'lobby') {
+          restorePending = false;
           quickStart = false;
-          // 前回の設定にして、「おに／かくれる」をえらぶ画面へ
-          send({ t: 'settings', settings: { cpus: Number(store.get('cpu.cpus')) || 3, cpuLevel: store.get('cpu.level') || 'normal', map: store.get('cpu.map') || 'house' } });
+          const saved = loadSettings(key);
+          if (offline) saved.cpus = saved.cpus || 3;
+          if (Object.keys(saved).length) send({ t: 'settings', settings: saved });
+        } else if (!restorePending && isHost()) {
+          store.set(key, JSON.stringify(S.settings));
         }
       }
       if (prevPhase !== S.phase) onPhaseChange(prevPhase);
       else if (prevRole !== me()?.role) onPhaseChange(prevPhase);
+      // のこり1人になったら、おには空をとべる
+      const lastOne = lastOneLeft();
+      if (lastOne !== wasLastOne) {
+        wasLastOne = lastOne;
+        if (lastOne && !MAPS[world.id]?.zeroG) feed('🦅 のこり1にん！ おにはそらをとべるようになった！');
+        renderTouch();
+        renderHint();
+      }
       syncCharKinds();
       renderPanel();
       renderHud();
@@ -1578,8 +1608,16 @@ function updateSeekerSpace(dt) {
   camera.rotation.set(self.look[1], self.look[0], 0);
 }
 
+// おにが空をとべるか（うちゅう、または、かくれている人がのこり1人のとき）
+function lastOneLeft() {
+  return S?.phase === 'hunt' && S.players.filter((p) => p.role === 'hider' && !p.found).length === 1;
+}
+function seekerCanFly() {
+  return !!MAPS[world.id]?.zeroG || lastOneLeft();
+}
+
 function updateSeeker(dt) {
-  if (MAPS[world.id]?.zeroG) return updateSeekerSpace(dt);
+  if (seekerCanFly()) return updateSeekerSpace(dt);
   const stunned = !!(me()?.stun || me()?.down);
   const { f, s } = stunned ? { f: 0, s: 0 } : moveInput();
   const yaw = self.look[0];
@@ -1780,7 +1818,7 @@ function renderHint() {
       : '<b>ペイントモード</b><br>ひだりドラッグ：ぬる　みぎドラッグ：カメラ　ホイール：ズーム<br>Alt+クリック：スポイト　1〜5：どうぐ　[ ]：ふとさ<br>Ctrl+Z：もどす　Ctrl+Y：やりなおし<br><b>スペース：いどうモードへ</b>';
   } else if (viewMode === 'fps') {
     html = document.pointerLockElement
-      ? (MAPS[world.id]?.zeroG ? '<b>おに（うちゅう）</b>　WASD：みているほうへとぶ　スペース/E：うえ　Q：した　Shift：はやく<br>' : '<b>おに</b>　WASD：いどう　Shift：はしる　スペース：ジャンプ<br>') + 'クリック：ペイントだん（はずすとじかんがへる）　Esc：マウスかいほう'
+      ? (seekerCanFly() ? (MAPS[world.id]?.zeroG ? '<b>おに（うちゅう）</b>' : '<b>おに（のこり1人！ そらをとべる）</b>') + '　WASD：みているほうへとぶ　スペース/E：うえ　Q：した　Shift：はやく<br>' : '<b>おに</b>　WASD：いどう　Shift：はしる　スペース：ジャンプ<br>') + 'クリック：ペイントだん（はずすとじかんがへる）　Esc：マウスかいほう'
       : '<b>がめんをクリックしてしてんそうさをスタート</b>';
   } else if (viewMode === 'frozen') {
     html = hiderMode === 'paint'
@@ -1812,7 +1850,7 @@ function renderTouch() {
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => held.delete(name));
     return b;
   };
-  if (viewMode === 'fps' && !MAPS[world.id]?.zeroG) btns.append(hold('jump', '⤒'));
+  if (viewMode === 'fps' && !seekerCanFly()) btns.append(hold('jump', '⤒'));
   else btns.append(hold('up', '⬆'), hold('down', '⬇'));
   const it = itemsOn() && me()?.item;
   if (it && it.k !== 'shotgun' && (viewMode === 'hider' || viewMode === 'fps')) {

@@ -196,7 +196,8 @@ export function createCpuBrains(ctx) {
       }
 
       // ----- 移動 -----
-      const zeroG = !!MAPS[mapId].zeroG;
+      // うちゅう、または、かくれている人がのこり1人のときは、とんでさがす
+      const zeroG = !!MAPS[mapId].zeroG || S.players.filter((q) => q.role === 'hider' && !q.found).length === 1;
       const to = goal.clone().sub(b.pos);
       if (zeroG) to.y += b.mode === 'chase' ? 0.3 : 0;
       else to.y = 0;
