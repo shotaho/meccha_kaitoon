@@ -2039,12 +2039,29 @@ function seekerPicker() {
   );
 }
 
+// おにの人数を［−］［＋］でかえる
+function seekerCountRow() {
+  const humans = S.players.filter((p) => p.online && !p.cpu).length;
+  const cpus = S.players.filter((p) => p.cpu).length || (humans === 1 ? 3 : 0);
+  const max = Math.max(1, Math.min(8, humans + cpus - 1));
+  const n = Math.min(S.settings.seekers, max);
+  const set = (v) => send({ t: 'settings', settings: { seekers: Math.max(1, Math.min(max, v)) } });
+  return h('div', { class: 'row', style: 'justify-content:center;margin:4px 0 10px' },
+    h('span', { style: 'font-weight:800' }, '👹 おにのにんずう'),
+    h('button', { class: 'sub small', disabled: n <= 1, onclick: () => set(n - 1) }, '−'),
+    h('span', { style: 'font-size:22px;font-weight:900;min-width:52px;text-align:center' }, `${n}にん`),
+    h('button', { class: 'sub small', disabled: n >= max, onclick: () => set(n + 1) }, '＋'),
+    h('span', { class: 'muted' }, `（さいだい${max}にん）`),
+  );
+}
+
 function roleChoiceCard() {
   if (!isHost()) return null;
   const cpuMatch = isCpuMatch();
   const big = 'flex:1;font-size:18px;padding:16px 8px';
   return h('div', { class: 'card' },
     h('h2', {}, S.phase === 'result' ? 'つぎはどっちであそぶ？' : 'どっちであそぶ？'),
+    seekerCountRow(),
     h('div', { class: 'row' },
       h('button', { class: 'danger', style: big, onclick: () => send({ t: 'start', role: 'seeker' }) }, '👹 おにになる'),
       h('button', { style: big, onclick: () => send({ t: 'start', role: 'hider' }) }, '🦎 かくれる'),
@@ -2052,7 +2069,7 @@ function roleChoiceCard() {
     !cpuMatch && h('button', { class: 'sub', style: 'width:100%;margin-top:8px', onclick: () => send({ t: 'start' }) }, '🎲 おまかせ（みんなランダム）'),
     h('p', { class: 'muted' }, cpuMatch
       ? (S.settings.cpus ? `CPU ${S.settings.cpus}にんとたいせん（したのせっていでかえられます）` : 'CPU 3にんとたいせんします')
-      : 'あなた（ホスト）の役をえらんでスタート。ほかの人の役はランダムできまります'),
+      : 'あなた（ホスト）の役をえらんでスタート。おにのにんずうにあわせて、ほかの人の役はランダムできまります'),
     seekerPicker(),
   );
 }
@@ -2076,7 +2093,7 @@ function settingsCard() {
       st.cpus > 0 && h('label', {}, 'CPUのつよさ'), st.cpus > 0 && sel('cpuLevel', ['easy', 'normal', 'hard'], (o) => ({ easy: 'よわい', normal: 'ふつう', hard: 'つよい' })[o]),
       h('label', {}, 'モード'), sel('mode', ['normal', 'infect'], (o) => (o === 'normal' ? 'ノーマル' : 'ふえおに（みつかるとおにになる）')),
       h('label', {}, 'アイテム'), sel('items', [0, 1], (o) => (o ? 'あり（たからばこ）' : 'なし')),
-      h('label', {}, 'おにのにんずう'), sel('seekers', [1, 2, 3, 4], (o) => `${o}にん`),
+      h('label', {}, 'おにのにんずう'), sel('seekers', [1, 2, 3, 4, 5, 6, 7, 8], (o) => `${o}にん`),
       h('label', {}, 'じゅんびタイム'), sel('prepSec', [30, 60, 90, 120, 150, 180, 240, 300], (o) => `${o}びょう`),
       h('label', {}, 'さがすタイム'), sel('huntSec', [30, 60, 90, 120, 150, 180, 240], (o) => `${o}びょう`),
       h('label', {}, 'はずれペナルティ'), sel('penaltySec', [0, 2, 3, 5, 10], (o) => (o ? `-${o}びょう` : 'なし')),
