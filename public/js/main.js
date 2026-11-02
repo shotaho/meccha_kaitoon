@@ -112,6 +112,24 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#222222');
 const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 200);
+// くらやみステージ：おに（じぶん）のかい中電とう／かくれる側・見ている人だけのうっすら明かり／CPU の擬態用の明かり
+scene.add(camera);
+const camLight = new THREE.SpotLight('#fff1d0', 0, 26, 0.5, 0.45, 1.5);
+camLight.position.set(0.15, -0.1, 0);
+camera.add(camLight);
+camLight.target.position.set(0, 0, -5);
+camera.add(camLight.target);
+const viewAmbient = new THREE.AmbientLight('#8a9ac0', 0);
+scene.add(viewAmbient);
+const camoAmbient = new THREE.AmbientLight('#ffffff', 0);
+scene.add(camoAmbient);
+const isDark = () => !!MAPS[world?.id]?.dark;
+function updateDarkLights() {
+  const dark = isDark();
+  const stunned = me()?.stun || me()?.down;
+  camLight.intensity = dark && viewMode === 'fps' && S?.phase === 'hunt' && !stunned ? 70 : 0;
+  viewAmbient.intensity = dark && viewMode !== 'fps' ? 0.55 : 0;
+}
 camera.rotation.order = 'YXZ';
 let world = buildWorld(scene, 'house');
 
@@ -1446,6 +1464,7 @@ function step() {
   for (const c of chars.values()) c.update(dt);
   animateChests(dt);
   animateNotes();
+  updateDarkLights();
   updateChestPrompt(dt);
   if (viewMode === 'hider') keepBodyOutOfObjects();
   updateVisibility();
@@ -1683,8 +1702,17 @@ function updateCamo() {
       if (hidden) {
         for (const o of chars.values()) o.root.visible = false;
         for (const sp of splats) sp.m.visible = false;
+        // くらやみでも、明るいときの色で写す（かい中電とうで照らされたとき、まわりと同じに見えるように）
+        if (isDark()) {
+          camoAmbient.intensity = 2.2;
+          viewAmbient.intensity = 0;
+          camLight.visible = false;
+        }
       } else {
         for (const sp of splats) sp.m.visible = true;
+        camoAmbient.intensity = 0;
+        camLight.visible = true;
+        updateDarkLights();
         updateVisibility();
       }
     });
@@ -1704,14 +1732,20 @@ const brains = createCpuBrains({
   whistling: () => [...whistleUntil.keys()],
   // 見つけ判定の描画中は、鬼と名札を隠して対象だけを出し入れする
   setProbe(targetId, show) {
+    viewAmbient.intensity = 0;
     for (const [id, c] of chars) {
       if (c.label) c.label.visible = false;
       c.setOutline(null);
       if (id === targetId) c.root.visible = show;
-      else if (c.kind === 'seeker') c.root.visible = false;
+      // おにの体はかくすが、かい中電とうの明かりはのこす（くらやみでは照らしたところだけ見える）
+      else if (c.kind === 'seeker') c.poseRoot.visible = false;
     }
   },
-  endProbe: () => updateVisibility(),
+  endProbe: () => {
+    for (const c of chars.values()) c.poseRoot.visible = true;
+    updateDarkLights();
+    updateVisibility();
+  },
 });
 
 function updateVisibility() {
@@ -1723,6 +1757,8 @@ function updateVisibility() {
     c.setSuit(suit);
     const info = playerInfo(id);
     c.setHeld(itemsOn() && info && !info.found && !info.down ? info.item?.k : null);
+    c.setLit(isDark());
+    c.setFlashlight(isDark() && S?.phase === 'hunt' && id !== myId && !info?.down);
     let vis = false;
     let label = false;
     let outline = null;
@@ -1829,6 +1865,7 @@ function renderHint() {
   }
   if (html && MAPS[world.id]?.doors && (viewMode === 'hider' || viewMode === 'fps')) html += '<br><b>F：ちかくのとびらを開ける・しめる</b>';
   if (html && itemsOn() && (viewMode === 'hider' || viewMode === 'fps')) html += '<br><b>F：たからばこをあける　G：アイテムをつかう</b>';
+  if (html && isDark()) html += viewMode === 'fps' ? '<br><b>🔦 まっくら！ かい中電とうでてらしてさがそう</b>' : '<br><b>🔦 おにのライトにてらされると見えるよ。かべや家具の色にぬろう</b>';
   el.innerHTML = html;
   el.classList.toggle('hidden', !html);
 }

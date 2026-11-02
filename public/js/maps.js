@@ -568,6 +568,56 @@ MAPS.prison = {
   ],
 };
 
+// くらやみやしき（まっくら。おにはかい中電とうでさがす）
+MAPS.dark = {
+  name: 'くらやみやしき',
+  outdoor: false,
+  dark: true,
+  sky: '#020203',
+  bounds: { x0: -14, x1: 14, z0: -10, z1: 10, h: 4 },
+  seekerSpawn: [1, 0, 8],
+  seekerLook: 0,
+  hiderSpawn: { c: [-2, 6], rx: 2.5, rz: 1 },
+  spots: [
+    { p: [-9, 0, -9.35], yaw: N, pose: 'stand', view: [-9, 1.5, -5] },
+    { p: [-13.75, 0, -6], yaw: E, pose: 'stand', view: [-9.5, 1.5, -6] },
+    { p: [5.7, 0, -8.75], yaw: N, pose: 'stand', view: [5.7, 1.5, -4.5] },
+    { p: [9.75, 0, -8], yaw: W, pose: 'crouch', view: [5.5, 1.5, -8] },
+    { p: [-6, 0, 9.75], yaw: S, pose: 'stand', view: [-6, 1.5, 5.5] },
+    { p: [9, 0, 4.75], yaw: S, pose: 'crouch', view: [9, 1.5, 0.5] },
+    { p: [12.25, 0, 9], yaw: W, pose: 'stand', view: [8, 1.5, 9] },
+    { p: [-13.75, 0, 5], yaw: E, pose: 'star', view: [-9, 1.5, 5] },
+    { p: [-3.6, 0, -6], yaw: E, pose: 'stand', view: [0.5, 1.5, -6] },
+  ],
+  nav: [[-10, 0, -6.5], [-6, 0, -5], [-8, 0, -1], [0, 0, -6], [0, 0, -1], [2, 0, 5], [-8, 0, 6.5], [-12, 0, 1], [7, 0, -6],
+    [11, 0, -4], [7, 0, 0], [11, 0, 4.4], [6, 0, 8], [-3, 0, 8], [12, 0, -1]],
+};
+
+// どうくつ
+MAPS.cave = {
+  name: 'どうくつ',
+  outdoor: false,
+  sky: '#1a1612',
+  fog: { color: '#1a1612', near: 12, far: 42 },
+  bounds: { x0: -18, x1: 18, z0: -12, z1: 12, h: 7 },
+  seekerSpawn: [15, 0, -3],
+  seekerLook: PI / 2,
+  hiderSpawn: { c: [-2, 5], rx: 2.5, rz: 1 },
+  spots: [
+    { p: [-6, 0, -0.85], yaw: N, pose: 'stand', view: [-6, 1.5, 3.5] },
+    { p: [5, 0, 4.3], yaw: N, pose: 'stand', view: [5, 1.5, 8.5] },
+    { p: [2, 0, -4.15], yaw: N, pose: 'stand', view: [2, 1.5, 0] },
+    { p: [1, 0, -5.25], yaw: S, pose: 'crouch', view: [1, 1.5, -9.5] },
+    { p: [-16.5, 2.4, -11], yaw: N, pose: 'crouch', view: [-16.5, 3.9, -7] },
+    { p: [-11.75, 0, -9], yaw: E, pose: 'crouch', view: [-7.5, 1.5, -9] },
+    { p: [8, 0, -11.75], yaw: N, pose: 'stand', view: [8, 1.5, -7.5] },
+    { p: [12, 0, -8.95], yaw: N, pose: 'star', view: [12, 1.5, -5] },
+    { p: [-17.75, 0, 4], yaw: E, pose: 'stand', view: [-13.5, 1.5, 4] },
+  ],
+  nav: [[-8, 0, -8], [-3, 0, -8], [4, 0, -8], [9, 0, -9], [14, 0, -8], [15, 0, -1], [9, 0, 0], [2, 0, 0], [-3, 0, 2], [-9, 0, 1],
+    [-15, 0, 0], [-13, 0, 8], [-6, 0, 9], [1, 0, 7.2], [8, 0, 8], [13, 0, 6], [-14, 1.2, -7.5]],
+};
+
 export const MAP_IDS = Object.keys(MAPS);
 
 // 地面の高さ（ブロックの世界以外は 0）

@@ -187,6 +187,7 @@ export class Character {
         tex.wrapS = THREE.RepeatWrapping;
         this.paint.push({ canvas, ctx, tex, size: p.tex, density: texelDensity(p) });
         material = new THREE.MeshBasicMaterial({ map: tex });
+        (this.basicMats ||= []).push(material);
       } else {
         material = seekerMat;
       }
@@ -275,6 +276,44 @@ export class Character {
     });
     this.armR.add(g);
     this.held = g;
+  }
+
+  // くらやみステージでは、体も明かりに照らされたところだけ見えるようにする
+  setLit(on) {
+    on = !!on && this.kind === 'hider' && !!this.basicMats;
+    if (on === !!this.lit) return;
+    this.lit = on;
+    if (on && !this.litMats) this.litMats = this.basicMats.map((m) => new THREE.MeshLambertMaterial({ map: m.map }));
+    this.parts.forEach((mesh, i) => (mesh.material = on ? this.litMats[i] : this.basicMats[i]));
+  }
+
+  // おにのかい中電とう（体をかくしてもライトはのこるように、root につける）
+  setFlashlight(on) {
+    on = !!on && this.kind === 'seeker';
+    if (on === !!this.flashlight) return;
+    if (on) {
+      const L = new THREE.SpotLight('#fff1d0', 60, 24, 0.45, 0.5, 1.6);
+      L.position.set(0, 1.5, 0.2);
+      const t = new THREE.Object3D();
+      t.position.set(0, 1.5, 6);
+      L.target = t;
+      this.root.add(L, t);
+      // 光っているのが見えるように、頭に小さなランプ
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshBasicMaterial({ color: '#fff6c8' }));
+      bulb.position.set(0.09, 0.22, 0.2);
+      bulb.raycast = () => {};
+      this.headPivot.add(bulb);
+      this.flashlight = { L, t, bulb };
+    } else {
+      const { L, t, bulb } = this.flashlight;
+      L.removeFromParent();
+      t.removeFromParent();
+      L.dispose();
+      bulb.removeFromParent();
+      bulb.geometry.dispose();
+      bulb.material.dispose();
+      this.flashlight = null;
+    }
   }
 
   // バットをふる
@@ -373,6 +412,11 @@ export class Character {
       n[key][1] += (goal[key][1] - n[key][1]) * k;
     }
     this.applyPose();
+    if (this.flashlight) {
+      // 見ている上下の向きにライトを向ける
+      const pch = this.lookPitch || 0;
+      this.flashlight.t.position.set(0, 1.5 + Math.sin(pch) * 6, 0.2 + Math.cos(pch) * 6);
+    }
     if (this.swingT > 0) {
       this.swingT -= dt;
       const t = 1 - Math.max(0, this.swingT) / 0.35;
